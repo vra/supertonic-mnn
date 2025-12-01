@@ -1,0 +1,22 @@
+[project]
+name = "supertonic-mnn"
+version = "0.1.0"
+description = "CLI tool for Supertonic MNN inference"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "mnn>=2.0.0",
+    "numpy",
+    "soundfile",
+    "huggingface_hub",
+    "tqdm",
+    "requests",
+    "onnxruntime"
+]
+
+[project.scripts]
+supertonic-mnn = "supertonic_mnn.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
