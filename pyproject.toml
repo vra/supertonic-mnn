@@ -5,13 +5,12 @@ description = "CLI tool for Supertonic MNN inference"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "mnn>=2.0.0",
+    "MNN>=2.0.0",
     "numpy",
     "soundfile",
     "huggingface_hub",
     "tqdm",
-    "requests",
-    "onnxruntime"
+    "requests"
 ]
 
 [project.scripts]

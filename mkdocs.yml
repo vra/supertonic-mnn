@@ -1,0 +1,48 @@
+site_name: Supertonic MNN
+site_url: https://vra.github.io/supertonic-mnn/
+repo_url: https://github.com/vra/supertonic-mnn
+repo_name: vra/supertonic-mnn
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - English:
+      - Introduction: en/index.md
+      - Installation: en/installation.md
+      - Usage: en/usage.md
+      - API Reference: en/api.md
+  - 中文:
+      - 介绍: zh/index.md
+      - 安装: zh/installation.md
+      - 使用指南: zh/usage.md
+      - API 参考: zh/api.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true 

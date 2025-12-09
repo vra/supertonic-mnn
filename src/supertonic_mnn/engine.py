@@ -44,7 +44,7 @@ class MNNInference:
             return [np.array(output[0].read())]
         output = MNN.expr.convert(output[0], MNN.expr.NCHW)
         output = output.read()
-        return np.array(output)
+        return [np.array(output)]
 
 
 class Style:
