@@ -41,10 +41,10 @@ class MNNInference:
         if len(output) <= 0:
             return None
         if len(output) > 0 and output[0].dtype == MNN.numpy.float32:
-            return [output[0].read()]
+            return [np.array(output[0].read())]
         output = MNN.expr.convert(output[0], MNN.expr.NCHW)
         output = output.read()
-        return output
+        return np.array(output)
 
 
 class Style:
