@@ -40,16 +40,16 @@ uv sync
 
 ```bash
 # Reading text from stdin
-echo "Hello world" | uv run supertonic-mnn --output hello.wav
+echo "Hello world" | supertonic-mnn --output hello.wav
 
 # Using local models with default precision (fp16)
-echo "Hello world" | uv run supertonic-mnn --output hello.wav --model-dir /path/to/models
+echo "Hello world" | supertonic-mnn --output hello.wav --model-dir /path/to/models
 
 # Specify precision
-echo "Hello world" | uv run supertonic-mnn --output hello.wav --precision fp32
+echo "Hello world" | supertonic-mnn --output hello.wav --precision fp32
 
 # Download models from HuggingFace (automatic)
-echo "Hello world" | uv run supertonic-mnn --output hello.wav --precision int8
+echo "Hello world" | supertonic-mnn --output hello.wav --precision int8
 
 # Batch processing from text file
 uv run supertonic-mnn --input-file sentences.txt --voice F1 --output result.wav
