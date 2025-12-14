@@ -175,6 +175,33 @@ class TextToSpeech:
         return wav_cat, dur_cat, rtf
 
 
+    def stream(
+        self,
+        text: str,
+        style: Style,
+        total_step: int,
+        speed: float = 1.05,
+        silence_duration: float = 0.3,
+    ):
+        assert (
+            style.ttl.shape[0] == 1
+        ), "Single speaker text to speech only supports single style"
+        text_list = chunk_text(text)
+        
+        for i, text_chunk in enumerate(text_list):
+            wav, dur_onnx, elapsed_time = self._infer([text_chunk], style, total_step, speed)
+            
+            # Yield the generated audio chunk
+            yield wav, dur_onnx, elapsed_time
+            
+            # Yield silence if it's not the last chunk
+            if i < len(text_list) - 1:
+                silence = np.zeros(
+                    (1, int(silence_duration * self.sample_rate)), dtype=np.float32
+                )
+                yield silence, silence_duration, 0.0
+
+
 def get_latent_mask(
     wav_lengths: np.ndarray, base_chunk_size: int, chunk_compress_factor: int
 ) -> np.ndarray:

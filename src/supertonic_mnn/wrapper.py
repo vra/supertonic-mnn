@@ -77,6 +77,41 @@ class SupertonicTTS:
             
         return wav_data, sample_rate
 
+    def synthesize_stream(
+        self, 
+        text: str, 
+        voice: str = "M1", 
+        steps: int = 5, 
+        speed: float = 1.0, 
+    ):
+        """
+        Synthesize text to speech as a stream (generator).
+
+        Args:
+            text (str): Text to synthesize.
+            voice (str): Voice style name.
+            steps (int): Number of diffusion steps.
+            speed (float): Speech speed.
+
+        Yields:
+            (audio_chunk, sample_rate): Tuple of audio chunk (numpy array) and sample rate.
+        """
+        engine = self._get_engine()
+        
+        # Load or retrieve voice style
+        if voice not in self.voice_styles:
+            style_path = get_voice_style_path(voice, self.model_dir)
+            self.voice_styles[voice] = load_voice_style([style_path])
+        
+        style = self.voice_styles[voice]
+        
+        stream_gen = engine.stream(text, style, total_step=steps, speed=speed)
+        
+        sample_rate = engine.sample_rate
+        
+        for wav, duration, elapsed in stream_gen:
+            yield wav[0], sample_rate
+
     @staticmethod
     def save(filename: str, audio_data: np.ndarray, sample_rate: int):
         """
