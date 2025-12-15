@@ -27,8 +27,8 @@ int main() {
     auto t1 = clk::now();
 
     auto d1 = std::chrono::duration_cast<ms>(t1 - t0);
-    std::cout << "TTS engine initialization time: " << d1.count() << " ms"
-              << std::endl;
+    PLOG(INFO, "TTS engine initialization time: " + std::to_string(d1.count()) +
+                   " ms");
 
     // 测试文本
     std::string text = "Nice to meet you";
@@ -41,25 +41,25 @@ int main() {
     auto t3 = clk::now();
 
     auto d2 = std::chrono::duration_cast<ms>(t3 - t2);
-    std::cout << "Synthesis time: " << d2.count() << " ms" << std::endl;
-    std::cout << "Audio length: " << audio_data.size() << " samples"
-              << std::endl;
-    std::cout << "Sample rate: " << sample_rate << " Hz" << std::endl;
-    std::cout << "Real Time Factor (RTF): " << rtf << std::endl;
+    PLOG(INFO, "Synthesis time: " + std::to_string(d2.count()) + " ms");
+    PLOG(INFO,
+         "Audio length: " + std::to_string(audio_data.size()) + " samples");
+    PLOG(INFO, "Sample rate: " + std::to_string(sample_rate) + " Hz");
+    PLOG(INFO, "Real Time Factor (RTF): " + std::to_string(rtf));
 
     // 保存音频文件
     std::string output_file = "output.wav";
     if (SupertonicTTS::save(output_file, audio_data, sample_rate)) {
-      std::cout << "Audio saved to: " << output_file << std::endl;
+      PLOG(INFO, "Audio saved to: " + output_file);
     } else {
-      std::cerr << "Failed to save audio file!" << std::endl;
+      PLOG(ERROR, "Failed to save audio file!");
       return 1;
     }
 
-    std::cout << "Demo completed successfully!" << std::endl;
+    PLOG(INFO, "Demo completed successfully!");
     return 0;
   } catch (const std::exception &e) {
-    std::cerr << "Error: " << e.what() << std::endl;
+    PLOG(ERROR, "Error: " + std::string(e.what()));
     return 1;
   }
 }

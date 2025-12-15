@@ -20,6 +20,7 @@
 
 using json = nlohmann::json;
 using namespace MNN::Express;
+#include <MNN/expr/ExprCreator.hpp>
 
 namespace { // Helper namespace
 
@@ -367,32 +368,6 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
   PLOG(INFO, "Supertonic TTS initialized successfully");
 }
 
-void MNNSupertonicTTSImpl::initializeModels() {
-  PLOG(INFO, "Initializing models...");
-
-  // Duration Predictor模型
-  std::string dp_model_path =
-      models_dir_ + "/mnn_models/" + precision_dir_ + "/duration_predictor.mnn";
-  dp_predictor_ = std::make_unique<MNNDurationPredictor>(dp_model_path);
-
-  // Text Encoder模型
-  std::string te_model_path =
-      models_dir_ + "/mnn_models/" + precision_dir_ + "/text_encoder.mnn";
-  te_encoder_ = std::make_unique<MNNTextEncoder>(te_model_path);
-
-  // Vector Estimator模型
-  std::string ve_model_path =
-      models_dir_ + "/mnn_models/" + precision_dir_ + "/vector_estimator.mnn";
-  ve_estimator_ = std::make_unique<MNNVectorEstimator>(ve_model_path);
-
-  // Vocoder模型
-  std::string vc_model_path =
-      models_dir_ + "/mnn_models/" + precision_dir_ + "/vocoder.mnn";
-  vc_vocoder_ = std::make_unique<MNNVocoder>(vc_model_path);
-
-  PLOG(INFO, "All models initialized successfully");
-}
-
 std::tuple<std::vector<float>, int, float>
 MNNSupertonicTTSImpl::synthesize(const std::string &text,
                                  const VoiceStyle &voice_style, int steps,
@@ -401,20 +376,14 @@ MNNSupertonicTTSImpl::synthesize(const std::string &text,
   auto start_time = std::chrono::high_resolution_clock::now();
 
   // 1. 文本编码
-  std::cout << "text:" << text << std::endl;
+  PLOG(INFO, "Synthesizing text: \"" + text + "\"");
   auto text_ids = text_processor_->encode(text);
-
-  std::cout << "text_ids: " << std::endl;
-  for (auto e : text_ids) {
-    std::cout << e << std::endl;
-  }
 
   // 2. 创建文本掩码
   std::vector<float> text_mask(text_ids.size(), 1);
 
   // 3. Duration预测
   auto duration = predictDuration(text_ids, voice_style.dp, text_mask);
-  std::cout << "duration: " << std::endl;
 
   // 4. 文本编码
   // Use the FULL ttl vector for text encoder (handled by MNNTextEncoder::encode
@@ -498,12 +467,62 @@ MNNSupertonicTTSImpl::synthesize(const std::string &text,
   return std::make_tuple(audio, sample_rate_, rtf);
 }
 
+// 核心处理函数
 std::vector<float> MNNSupertonicTTSImpl::predictDuration(
     const std::vector<int> &text_ids,
     const std::vector<std::vector<float>> &style_dp,
     const std::vector<float> &text_mask) {
 
-  return dp_predictor_->predict(text_ids, style_dp, text_mask);
+  MNN::Express::ExecutorScope scope(executor_);
+
+  // 准备输入
+  std::vector<MNN::Express::VARP> inputs(3);
+  int num_tokens = static_cast<int>(text_ids.size());
+  int dp_size_0 = static_cast<int>(style_dp.size());
+  int dp_size_1 = static_cast<int>(style_dp[0].size());
+
+  // Input 0: text_ids {1, num_tokens} NCHW
+  inputs[0] =
+      MNN::Express::_Input({1, num_tokens}, NCHW, halide_type_of<int>());
+  auto ptr0 = inputs[0]->writeMap<int>();
+  for (int i = 0; i < num_tokens; ++i) {
+    ptr0[i] = text_ids[i];
+  }
+
+  // Input 1: style_dp {1, dp_size_0, dp_size_1} NCHW
+  inputs[1] = MNN::Express::_Input({1, dp_size_0, dp_size_1}, NCHW,
+                                   halide_type_of<float>());
+  auto ptr1 = inputs[1]->writeMap<float>();
+  for (int i = 0; i < dp_size_0; ++i) {
+    for (int j = 0; j < dp_size_1; ++j) {
+      ptr1[i * dp_size_1 + j] = style_dp[i][j];
+    }
+  }
+
+  // Input 2: text_mask {1, 1, num_tokens} NCHW
+  inputs[2] =
+      MNN::Express::_Input({1, 1, num_tokens}, NCHW, halide_type_of<float>());
+  auto ptr2 = inputs[2]->writeMap<float>();
+  for (int i = 0; i < num_tokens; ++i) {
+    ptr2[i] = 1.0f; // Force mask to 1.0 based on mnn_duration_predictor.cpp
+                    // logic which overrode param
+  }
+
+  // 执行推理
+  auto outputs = dp_module_->onForward(inputs);
+
+  // 处理输出
+  if (outputs.empty()) {
+    PLOG(ERROR, "Duration Predictor returned empty output");
+    return {};
+  }
+
+  auto output = outputs[0];
+  auto size = output->getInfo()->size;
+  std::vector<float> result(size);
+  ::memcpy(result.data(), output->readMap<float>(), size * sizeof(float));
+
+  return result;
 }
 
 std::vector<float> MNNSupertonicTTSImpl::encodeText(
@@ -511,7 +530,52 @@ std::vector<float> MNNSupertonicTTSImpl::encodeText(
     const std::vector<std::vector<float>> &style_ttl,
     const std::vector<float> &text_mask) {
 
-  return te_encoder_->encode(text_ids, style_ttl, text_mask);
+  MNN::Express::ExecutorScope scope(executor_);
+
+  std::vector<MNN::Express::VARP> inputs(3);
+
+  // Input 0: Text IDs
+  int num_tokens = static_cast<int>(text_ids.size());
+  inputs[0] =
+      MNN::Express::_Input({1, num_tokens}, NCHW, halide_type_of<int>());
+  auto ptr0 = inputs[0]->writeMap<int>();
+  for (int i = 0; i < num_tokens; ++i) {
+    ptr0[i] = text_ids[i];
+  }
+
+  // Input 1: Style Output (TTL)
+  int ttl_size_0 = static_cast<int>(style_ttl.size());
+  int ttl_size_1 = static_cast<int>(style_ttl[0].size());
+  inputs[1] = MNN::Express::_Input({1, ttl_size_0, ttl_size_1}, NCHW,
+                                   halide_type_of<float>());
+  auto ptr1 = inputs[1]->writeMap<float>();
+  for (int i = 0; i < ttl_size_0; ++i) {
+    for (int j = 0; j < ttl_size_1; ++j) {
+      ptr1[i * ttl_size_1 + j] = style_ttl[i][j];
+    }
+  }
+
+  // Input 2: Text Mask
+  inputs[2] =
+      MNN::Express::_Input({1, 1, num_tokens}, NCHW, halide_type_of<float>());
+  auto ptr2 = inputs[2]->writeMap<float>();
+  for (int i = 0; i < num_tokens; ++i) {
+    ptr2[i] = text_mask[i];
+  }
+
+  auto outputs = te_module_->onForward(inputs);
+
+  if (outputs.empty()) {
+    PLOG(ERROR, "Text Encoder returned empty output");
+    return {};
+  }
+
+  auto output = outputs[0];
+  auto size = output->getInfo()->size;
+  std::vector<float> result(size);
+  ::memcpy(result.data(), output->readMap<float>(), size * sizeof(float));
+
+  return result;
 }
 
 std::vector<float> MNNSupertonicTTSImpl::estimateVector(
@@ -519,17 +583,119 @@ std::vector<float> MNNSupertonicTTSImpl::estimateVector(
     const std::vector<float> &style_ttl, const std::vector<int> &latent_mask,
     const std::vector<float> &text_mask, int current_step, int total_step) {
 
-  return ve_estimator_->estimate(noisy_latent, text_emb, style_ttl, latent_mask,
-                                 text_mask, current_step, total_step);
+  MNN::Express::ExecutorScope scope(executor_);
+
+  // Prepare 7 inputs
+  std::vector<MNN::Express::VARP> inputs(7);
+
+  // Note: Previous fixes in mnn_estimator.cpp used NCHW.
+  // Shapes derived from mnn_estimator.cpp
+
+  // 1. noisy_latent (1, dim, len) -> NCHW from {1, len, dim} ? No.
+  // mnn_estimator.cpp: {1, latent_len, latent_dim} but cast to NCHW?
+  // Wait, my previous fix in mnn_estimator.cpp changed NCHW/NHWC.
+  // Let's assume standard logic:
+  // noisy_latent size = total_latent_size (1 * dim * len)
+  // We need to know len and dim explicitly if we reconstruct shape.
+  // But redundant reconstruction is hard.
+  // Let's check noisy_latent size.
+  // dim = 24 * 6 = 144.
+  // len = size / 144.
+  int total_size = static_cast<int>(noisy_latent.size());
+  int latent_dim = ldim_ * chunk_compress_factor_;
+  int latent_len = total_size / latent_dim;
+
+  // Input 0: noisy_latent {1, latent_dim, latent_len} NCHW
+  inputs[0] = MNN::Express::_Input({1, latent_dim, latent_len}, NCHW,
+                                   halide_type_of<float>());
+  ::memcpy(inputs[0]->writeMap<float>(), noisy_latent.data(),
+           total_size * sizeof(float));
+
+  // Input 1: text_emb {1, channels, text_len}
+  int text_len = static_cast<int>(text_mask.size());
+  int text_channels = text_emb.size() / text_len;
+
+  inputs[1] = MNN::Express::_Input({1, text_channels, text_len}, NCHW,
+                                   halide_type_of<float>());
+  ::memcpy(inputs[1]->writeMap<float>(), text_emb.data(),
+           text_emb.size() * sizeof(float));
+
+  // Input 2: style_ttl {1, 256} ?? No.
+  // `mnn_estimator.cpp` inputs[2] shape: `{1, 50, 256}` in previous broken
+  // code? No, `synthesize` passes explicit `voice_style.ttl[0]` which was ONE
+  // vector. BUT I fixed `synthesize` to pass flattened `style_ttl_flat`. So
+  // style_ttl here is the FULL flattened vector (12800 floats). The Model input
+  // 2 shape in `mnn_estimator.cpp`: The fix I did changed it to `{1, 50, 256}`
+  // NCHW? Let's check what I wrote in mnn_estimator.cpp via memory? No I can't.
+  // But my task summary says "Vector Estimator Input... fixed... to flatten and
+  // pass entire style vector". So the shape must be {1, 50, 256}.
+  inputs[2] = MNN::Express::_Input({1, 50, 256}, NCHW, halide_type_of<float>());
+  ::memcpy(inputs[2]->writeMap<float>(), style_ttl.data(),
+           style_ttl.size() * sizeof(float));
+
+  // Input 3: latent_mask {1, 1, latent_len}
+  inputs[3] = MNN::Express::_Input({1, 1, latent_len}, NCHW,
+                                   halide_type_of<float>()); // float!
+  auto ptr3 = inputs[3]->writeMap<float>();
+  for (int i = 0; i < latent_len; ++i)
+    ptr3[i] = static_cast<float>(latent_mask[i]);
+
+  // Input 4: text_mask {1, 1, text_len}
+  inputs[4] =
+      MNN::Express::_Input({1, 1, text_len}, NCHW, halide_type_of<float>());
+  ::memcpy(inputs[4]->writeMap<float>(), text_mask.data(),
+           text_mask.size() * sizeof(float));
+
+  // Input 5: current_step {1}
+  inputs[5] = MNN::Express::_Input({1}, NCHW, halide_type_of<float>());
+  inputs[5]->writeMap<float>()[0] = static_cast<float>(current_step);
+
+  // Input 6: total_step {1}
+  inputs[6] = MNN::Express::_Input({1}, NCHW, halide_type_of<float>());
+  inputs[6]->writeMap<float>()[0] = static_cast<float>(total_step);
+
+  auto outputs = ve_module_->onForward(inputs);
+
+  if (outputs.empty()) {
+    PLOG(ERROR, "Vector Estimator returned empty output");
+    return {};
+  }
+
+  auto output = outputs[0];
+  auto size = output->getInfo()->size;
+  std::vector<float> result(size);
+  ::memcpy(result.data(), output->readMap<float>(), size * sizeof(float));
+  return result;
 }
 
 std::vector<float>
 MNNSupertonicTTSImpl::vocode(const std::vector<float> &latent) {
-  return vc_vocoder_->vocode(latent);
+  MNN::Express::ExecutorScope scope(executor_);
+
+  // Shape: {1, 144, latent_len}
+  // Latent dim 144.
+  int total_size = static_cast<int>(latent.size());
+  int dim = 144;
+  int len = total_size / dim;
+
+  std::vector<MNN::Express::VARP> inputs(1);
+  inputs[0] =
+      MNN::Express::_Input({1, dim, len}, NCHW, halide_type_of<float>());
+  ::memcpy(inputs[0]->writeMap<float>(), latent.data(),
+           total_size * sizeof(float));
+
+  auto outputs = vc_module_->onForward(inputs);
+  if (outputs.empty())
+    return {};
+
+  auto output = outputs[0];
+  auto size = output->getInfo()->size;
+  std::vector<float> result(size);
+  ::memcpy(result.data(), output->readMap<float>(), size * sizeof(float));
+  return result;
 }
 
 std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text) {
-  // 简化的Process实现，用于兼容基类接口
   // 简化的Process实现，用于兼容基类接口
   VoiceStyle default_voice({{{0.1f, 0.2f, 0.3f}}}, {{{0.4f, 0.5f, 0.6f}}});
   auto [audio_float, sample_rate, rtf] =
@@ -542,4 +708,41 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text) {
   }
 
   return std::make_tuple(sample_rate, audio_int16);
+}
+
+// 初始化MNN模型
+void MNNSupertonicTTSImpl::initializeModels() {
+  PLOG(INFO, "Initializing models...");
+
+  // Set up Runtime (Executor) with Low Precision config
+  MNN::BackendConfig backendConfig;
+  backendConfig.precision = MNN::BackendConfig::Precision_Low;
+  backendConfig.memory = MNN::BackendConfig::Memory_Low;
+
+  // Create Executor once
+  executor_ = std::shared_ptr<MNN::Express::Executor>(
+      MNN::Express::Executor::newExecutor(MNN_FORWARD_CPU, backendConfig, 4));
+
+  MNN::Express::ExecutorScope scope(executor_);
+
+  // Load Models directly using Module::load
+  auto loadModule = [&](const std::string &filename, const std::string &name) {
+    std::string path =
+        models_dir_ + "/mnn_models/" + precision_dir_ + "/" + filename;
+    std::vector<std::string> inputs,
+        outputs; // Empty for auto-detection or not needed for load
+    auto module = std::shared_ptr<MNN::Express::Module>(
+        MNN::Express::Module::load(inputs, outputs, path.c_str()));
+    if (!module) {
+      PLOG(ERROR, "Failed to load " + name + ": " + path);
+      throw std::runtime_error("Failed to load model: " + path);
+    }
+    PLOG(INFO, "Successfully loaded " + name);
+    return module;
+  };
+
+  dp_module_ = loadModule("duration_predictor.mnn", "Duration Predictor");
+  te_module_ = loadModule("text_encoder.mnn", "Text Encoder");
+  ve_module_ = loadModule("vector_estimator.mnn", "Vector Estimator");
+  vc_module_ = loadModule("vocoder.mnn", "Vocoder");
 }

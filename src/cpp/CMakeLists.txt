@@ -113,9 +113,5 @@ set(SHARED_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/utils.cpp
     ${CMAKE_SOURCE_DIR}/src/supertonic/mnn_supertonic_tts_impl.cpp
     ${CMAKE_SOURCE_DIR}/src/supertonic/supertonic.cpp
-    ${CMAKE_SOURCE_DIR}/src/supertonic/mnn_duration_predictor.cpp
-    ${CMAKE_SOURCE_DIR}/src/supertonic/mnn_estimator.cpp
-    ${CMAKE_SOURCE_DIR}/src/supertonic/mnn_text_encoder.cpp
-    ${CMAKE_SOURCE_DIR}/src/supertonic/mnn_vocoder.cpp
 )
 add_subdirectory(examples)
