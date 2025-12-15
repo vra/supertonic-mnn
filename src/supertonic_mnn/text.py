@@ -115,7 +115,9 @@ class UnicodeProcessor:
 
     def __call__(self, text_list: list[str]) -> tuple[np.ndarray, np.ndarray]:
         text_list = [self._preprocess_text(t) for t in text_list]
+        print(text_list)
         text_ids_lengths = np.array([len(text) for text in text_list], dtype=np.int64)
+        print(text_ids_lengths)
         text_ids = np.zeros((len(text_list), text_ids_lengths.max()), dtype=np.int64)
         for i, text in enumerate(text_list):
             unicode_vals = self._text_to_unicode_values(text)

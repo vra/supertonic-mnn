@@ -37,6 +37,9 @@ class MNNInference:
             mnn_placeholder.write(value)
             mnn_inputs.append(mnn_placeholder)
 
+        for item in mnn_inputs:
+            print(item.shape)
+        print("=====================")
         output = self.model.forward(mnn_inputs)
         if len(output) <= 0:
             return None
@@ -97,11 +100,14 @@ class TextToSpeech:
             len(text_list) == style.ttl.shape[0]
         ), "Number of texts must match number of style vectors"
         bsz = len(text_list)
-        
+
         # Start timing for RTF calculation
         start_time = time.time()
-        
+
+        print("==> text_list:", text_list)
         text_ids, text_mask = self.text_processor(text_list)
+        print("==> text_ids:", text_ids, style.dp, text_mask)
+
         dur_onnx, *_ = self.dp_ort.run(
             None, {"text_ids": text_ids, "style_dp": style.dp, "text_mask": text_mask}
         )
@@ -110,7 +116,10 @@ class TextToSpeech:
             None,
             {"text_ids": text_ids, "style_ttl": style.ttl, "text_mask": text_mask},
         )
+        print(text_emb_onnx[:10])
         xt, latent_mask = self.sample_noisy_latent(dur_onnx)
+        print('xt:', xt.shape)
+        print('latent_mask:', latent_mask.shape)
         total_step_np = np.array([total_step] * bsz, dtype=np.float32)
         for step in range(total_step):
             current_step = np.array([step] * bsz, dtype=np.float32)
@@ -127,10 +136,10 @@ class TextToSpeech:
                 },
             )
         wav, *_ = self.vocoder_ort.run(None, {"latent": xt})
-        
+
         # Calculate elapsed time for RTF
         elapsed_time = time.time() - start_time
-        
+
         return wav, dur_onnx, elapsed_time
 
     def __call__(
@@ -148,11 +157,11 @@ class TextToSpeech:
         wav_cat = None
         dur_cat = None
         total_elapsed_time = 0.0
-        
+
         for text in text_list:
             wav, dur_onnx, elapsed_time = self._infer([text], style, total_step, speed)
             total_elapsed_time += elapsed_time
-            
+
             if wav_cat is None:
                 wav_cat = wav
                 dur_cat = dur_onnx
@@ -162,16 +171,16 @@ class TextToSpeech:
                 )
                 wav_cat = np.concatenate([wav_cat, silence, wav], axis=1)
                 dur_cat += dur_onnx + silence_duration
-                
+
         # Calculate overall RTF
         total_audio_duration = wav_cat.shape[1] / self.sample_rate
         rtf = total_elapsed_time / total_audio_duration if total_audio_duration > 0 else 0.0
-        
+
         # Print RTF information
         print(f"RTF (Real Time Factor): {rtf:.4f}")
         print(f"Audio Duration: {total_audio_duration:.2f}s")
         print(f"Generation Time: {total_elapsed_time:.2f}s")
-        
+
         return wav_cat, dur_cat, rtf
 
 
