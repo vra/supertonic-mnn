@@ -447,6 +447,11 @@ MNNSupertonicTTSImpl::synthesize(const std::string &text,
     total_duration_sec =
         duration[0]; // Assume 1st element is duration (or unique element)
 
+  // Apply speed logic
+  if (speed > 0.0f) {
+    total_duration_sec /= speed;
+  }
+
   int wav_len = static_cast<int>(total_duration_sec * sample_rate_);
   int base_chunk = base_chunk_size_ * chunk_compress_factor_;
   int latent_len = (wav_len + base_chunk - 1) / base_chunk;
