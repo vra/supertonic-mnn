@@ -15,13 +15,6 @@ public:
   // 示例接口方法
   virtual std::tuple<int, Audio> Process(const std::string &text) = 0;
   
-  // 添加synthesize接口方法
-  virtual std::tuple<std::vector<float>, int, float> synthesize(
-      const std::string& text,
-      const class VoiceStyle& voice_style,
-      int steps,
-      float speed) = 0;
-
 private:
   int sample_rate_ = 16000;
 };

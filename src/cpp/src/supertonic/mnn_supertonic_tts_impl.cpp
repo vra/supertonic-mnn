@@ -115,7 +115,7 @@ namespace
 
 } // namespace
 
-// 文本处理器实现
+// Text processor implementation
 MNNSupertonicTTSImpl::TextProcessor::TextProcessor(
     const std::string &indexer_path)
 {
@@ -130,7 +130,7 @@ MNNSupertonicTTSImpl::TextProcessor::TextProcessor(
   file >> indexer_json;
   file.close();
 
-  // 解析索引器
+  // Parse indexer
   for (auto &item : indexer_json.items())
   {
     uint16_t unicode_val = static_cast<uint16_t>(std::stoi(item.key()));
@@ -211,8 +211,7 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
   // "e.g.," -> "for example, "
   // "i.e.," -> "that is, "
   // "@" -> " at "
-  // Note: iterating regex or simple find/replace. Since these are few, simple
-  // find/replace loop is ok.
+  // Simple find/replace loop for these few replacements.
   auto replace_all = [](std::string &str, const std::string &from,
                         const std::string &to)
   {
@@ -239,8 +238,7 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
   t = std::regex_replace(t, std::regex(" '"), "'");
 
   // Duplicate quotes
-  replace_all(t, "\"\"", "\""); // naive loop needed if recursive, but Python
-                                // while loop suggests it handles multiple
+  replace_all(t, "\"\"", "\"");
   while (t.find("\"\"") != std::string::npos)
     replace_all(t, "\"\"", "\"");
   while (t.find("''") != std::string::npos)
@@ -251,7 +249,7 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
   // Remove extra spaces sequence
   t = std::regex_replace(t, std::regex("\\s+"), " ");
 
-  // Strip
+  // Strip leading/trailing whitespace
   t.erase(0, t.find_first_not_of(" "));
   t.erase(t.find_last_not_of(" ") + 1);
 
@@ -286,7 +284,7 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
     }
     else
     {
-      // Unknown char. Using 0 as per previous implementation logic.
+      // Handle unknown characters by mapping to index 0 (padding/unknown)
       encoded.push_back(0);
     }
   }
@@ -294,14 +292,15 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
   return encoded;
 }
 
-// MNNSupertonicTTSImpl实现
+// MNNSupertonicTTSImpl implementation
 MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
-                                           const std::string &precision_dir,
-                                           const std::string &cache_dir)
-    : models_dir_(models_dir), precision_dir_(precision_dir),
-      cache_dir_(cache_dir)
+                                           const std::string &precision_dir)
+    : models_dir_(models_dir), precision_dir_(precision_dir)
 {
 
+  std::cout << "model_dir_" << models_dir_ << std::endl;
+  std::cout << "precsion_dir: " << precision_dir_ << std::endl;
+  std::cout << "cache_dir_: " << cache_dir_ << std::endl;
   PLOG(INFO, "Initializing Supertonic TTS with models_dir: " + models_dir_);
 
   // Load config
@@ -315,7 +314,7 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
   json config;
   config_file >> config;
 
-  // Parse config
+  // Parse configuration
   try
   {
     if (config.contains("ae"))
@@ -330,8 +329,7 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
       base_chunk_size_ = 512;
     }
 
-    // TTL config often embedded or separate, Python uses "ttl" key
-    //  Let's try to find "ttl" or infer. If "ttl" key exists, use it.
+    // Attempt to retrieve TTL configuration
     if (config.contains("ttl"))
     {
       chunk_compress_factor_ = config["ttl"].value("chunk_compress_factor", 6);
@@ -339,10 +337,10 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
     }
     else
     {
-      // Fallback: search deep or use defaults
+      // Fallback: Use default values or check specific nested keys
       chunk_compress_factor_ = 6;
       ldim_ = 24;
-      // Attempt to read from "style_encoder" -> "proj_in"
+
       if (config.contains("style_encoder") &&
           config["style_encoder"].contains("proj_in"))
       {
@@ -364,11 +362,11 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
     throw;
   }
 
-  // 初始化文本处理器
+  // Initialize text processor
   std::string indexer_path = models_dir_ + "/mnn_models/unicode_indexer.json";
   text_processor_ = std::make_unique<TextProcessor>(indexer_path);
 
-  // 初始化模型推理器
+  // Initialize MNN inference engine
   initializeModels();
 
   // Load Voice Styles
@@ -451,36 +449,27 @@ void MNNSupertonicTTSImpl::loadVoiceStyle(const std::string &voice_name)
   }
 }
 
-std::string MNNSupertonicTTSImpl::preprocessText(const std::string &text,
-                                                 const std::string &language)
+std::string MNNSupertonicTTSImpl::preprocessText(const std::string &text)
 {
-  // 移除多余的空白字符
+  // Remove excess whitespace
   std::string processed = std::regex_replace(text, std::regex("\\s+"), " ");
-  // 移除首尾空白字符
+  // Trim leading/trailing whitespace
   processed = std::regex_replace(processed, std::regex("^\\s+|\\s+$"), "");
-  // 根据语言进行特定的预处理
-  if (language == "zh")
-  {
-    processed = std::regex_replace(processed, std::regex("[\\.!?]+$"), "。");
-  }
-  else
-  {
-    processed = std::regex_replace(processed, std::regex("[\\.!?]+$"), ".");
-  }
+  processed = std::regex_replace(processed, std::regex("[\\.!?]+$"), ".");
   return processed;
 }
 
-std::tuple<std::vector<float>, int, float>
-MNNSupertonicTTSImpl::synthesize(const std::string &text,
-                                 const std::string &voice_name, int steps,
-                                 float speed, const std::string &language)
+std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text)
 {
+  const std::string &voice_name = "F1";
+  int steps = 5;
+  float speed = 1.0;
   if (voice_styles_.find(voice_name) == voice_styles_.end())
   {
     PLOG(ERROR, "Voice style not found: " + voice_name);
     throw std::runtime_error("Voice style not found: " + voice_name);
   }
-  std::string processed_text = preprocessText(text, language);
+  std::string processed_text = preprocessText(text);
   return synthesize(processed_text, voice_styles_[voice_name], steps, speed);
 }
 
@@ -491,31 +480,66 @@ bool MNNSupertonicTTSImpl::save(const std::string &filename,
   return writeWavFile(filename, audio_data, sample_rate);
 }
 
-std::tuple<std::vector<float>, int, float>
-MNNSupertonicTTSImpl::synthesize(const std::string &text,
-                                 const VoiceStyle &voice_style, int steps,
-                                 float speed)
+std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
+                                                        const VoiceStyle &voice_style, int steps,
+                                                        float speed)
 {
 
+  auto default_ret = std::make_tuple(sample_rate_, std::vector<int16_t>(0));
   auto start_time = std::chrono::high_resolution_clock::now();
 
-  // 1. 文本编码
   PLOG(INFO, "Synthesizing text: \"" + text + "\"");
-  auto text_ids = text_processor_->encode(text);
 
-  // 2. 创建文本掩码
-  std::vector<float> text_mask(text_ids.size(), 1);
+  // 1. Text Encoding
+  std::vector<int> text_ids = text_processor_->encode(text);
+  // Ensure non-empty text_ids; pad with 0 if necessary
+  if (text_ids.empty())
+  {
+    text_ids.push_back(0);
+  }
 
-  // 3. Duration预测
-  auto duration = predictDuration(text_ids, voice_style.dp, text_mask);
+  // Create text mask (all 1s)
+  std::vector<float> text_mask(text_ids.size(), 1.0f);
 
-  // 4. 文本编码
-  // Use the FULL ttl vector for text encoder (handled by MNNTextEncoder::encode
-  // which we just fixed)
-  auto text_emb = encodeText(text_ids, voice_style.ttl, text_mask);
+  // 2. Duration Prediction
+  auto duration_outputs = predictDuration(text_ids, voice_style.dp, text_mask);
+  if (duration_outputs.empty())
+  {
+    PLOG(ERROR, "Duration prediction failed");
+    return default_ret;
+  }
 
-  // 5. 向量估计
-  // Flatten style.ttl for Vector Estimator (which takes 1D)
+  // 3. Process Duration to get total length
+  // The first element of duration_outputs is expected to be the total duration
+  float total_duration_sec = duration_outputs[0];
+
+  // Apply speed adjustment
+  if (speed > 0.0f)
+  {
+    total_duration_sec /= speed;
+  }
+
+  int wav_len = static_cast<int>(total_duration_sec * sample_rate_);
+  int latent_len = wav_len / base_chunk_size_;
+
+  // Ensure minimum length
+  if (latent_len < 1)
+    latent_len = 1;
+
+  wav_len = latent_len * base_chunk_size_; // Recalculate aligned wav_len
+
+  // 4. Generate Text Embedding
+  // This uses the text encoder model
+  std::vector<float> text_emb =
+      encodeText(text_ids, voice_style.ttl, text_mask);
+  if (text_emb.empty())
+  {
+    PLOG(ERROR, "Text encoding failed");
+    return default_ret;
+  }
+
+  // 5. Vector Estimation (Flow Matching)
+  // Flatten style.ttl for Vector Estimator input
   std::vector<float> style_ttl_flat;
   if (!voice_style.ttl.empty())
   {
@@ -528,38 +552,13 @@ MNNSupertonicTTSImpl::synthesize(const std::string &text,
     }
   }
 
-  // Sample noisy latent matchng Python logic:
-  // bsz = len(duration) (1 here)
-  // wav_len_max = duration.max() * self.sample_rate
-  // wav_lengths = (duration * self.sample_rate).astype(np.int64)
-  // chunk_size = self.base_chunk_size * self.chunk_compress_factor
-  // latent_len = ((wav_len_max + chunk_size - 1) / chunk_size).astype(np.int32)
-  // latent_dim = self.ldim * self.chunk_compress_factor
+  // Initialize Latent Mask
+  std::vector<int> latent_mask(latent_len, 1);
 
-  // Only 1 item in batch
-  float total_duration_sec = 0.0f;
-  if (!duration.empty())
-    total_duration_sec =
-        duration[0]; // Assume 1st element is duration (or unique element)
-
-  // Apply speed logic
-  if (speed > 0.0f)
-  {
-    total_duration_sec /= speed;
-  }
-
-  int wav_len = static_cast<int>(total_duration_sec * sample_rate_);
-  int base_chunk = base_chunk_size_ * chunk_compress_factor_;
-  int latent_len = (wav_len + base_chunk - 1) / base_chunk;
+  // Generate Noisy Latent (Gaussian Noise)
   int latent_dim = ldim_ * chunk_compress_factor_;
+  std::vector<float> noisy_latent(1 * latent_dim * latent_len);
 
-  // Ensure latent_len is at least 1
-  if (latent_len < 1)
-    latent_len = 1;
-
-  int total_latent_size = 1 * latent_dim * latent_len;
-
-  std::vector<float> noisy_latent(total_latent_size);
   std::random_device rd;
   std::mt19937 gen(rd());
   std::normal_distribution<float> dis(0.0f, 1.0f);
@@ -569,34 +568,44 @@ MNNSupertonicTTSImpl::synthesize(const std::string &text,
     noisy_latent[i] = dis(gen);
   }
 
-  // Latent mask
-  std::vector<int> latent_mask_vec(latent_len, 1);
-
-  // 执行多步估计
+  // Perform Flow Matching steps
   std::vector<float> estimated = noisy_latent;
   for (int step = 0; step < steps; ++step)
   {
-    // Note: estimateVector signature might need update if I changed logic?
-    // It takes `latent_mask`.
-    estimated = estimateVector(estimated, text_emb, style_ttl_flat,
-                               latent_mask_vec, text_mask, step, steps);
+    estimated = estimateVector(estimated, text_emb, style_ttl_flat, latent_mask,
+                               text_mask, step, steps);
+    if (estimated.empty())
+    {
+      PLOG(ERROR, "Vector estimation failed at step " + std::to_string(step));
+      return default_ret;
+    }
   }
 
-  // 6. 声码器处理
-  // Check vocoder input.
-  auto audio = vocode(estimated);
+  // 6. Vocoder Synthesis
+  std::vector<float> audio = vocode(estimated);
+  if (audio.empty())
+  {
+    PLOG(ERROR, "Vocoding failed");
+    return default_ret;
+  }
 
-  // 计算RTF
   auto end_time = std::chrono::high_resolution_clock::now();
-  auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      end_time - start_time);
-  float val_sec = (float)audio.size() / sample_rate_;
-  float rtf = (float)duration_ms.count() / (val_sec * 1000.0f);
+  std::chrono::duration<float> duration = end_time - start_time;
+  float time_cost = duration.count();
+  float audio_duration = static_cast<float>(audio.size()) / sample_rate_;
+  float rtf = time_cost / audio_duration;
+  PLOG(INFO, "RTF: " + std::to_string(rtf));
 
-  return std::make_tuple(audio, sample_rate_, rtf);
+  std::vector<int16_t> audio_int16;
+  for (int i = 0; i < audio.size(); i++)
+  {
+    audio_int16.push_back(audio[i] * 32768);
+  }
+
+  return std::make_tuple(sample_rate_, audio_int16);
 }
 
-// 核心处理函数
+// Core processing function
 std::vector<float> MNNSupertonicTTSImpl::predictDuration(
     const std::vector<int> &text_ids,
     const std::vector<std::vector<float>> &style_dp,
@@ -605,7 +614,7 @@ std::vector<float> MNNSupertonicTTSImpl::predictDuration(
 
   MNN::Express::ExecutorScope scope(executor_);
 
-  // 准备输入
+  // Prepare inputs
   std::vector<MNN::Express::VARP> inputs(3);
   int num_tokens = static_cast<int>(text_ids.size());
   int dp_size_0 = static_cast<int>(style_dp.size());
@@ -641,10 +650,10 @@ std::vector<float> MNNSupertonicTTSImpl::predictDuration(
     ptr2[i] = text_mask[i];
   }
 
-  // 执行推理
-  auto outputs = dp_module_->onForward(inputs);
+  // Run Inference
+  std::vector<MNN::Express::VARP> outputs = dp_module_->onForward(inputs);
 
-  // 处理输出
+  // Process Output
   if (outputs.empty())
   {
     PLOG(ERROR, "Duration Predictor returned empty output");
@@ -702,7 +711,8 @@ std::vector<float> MNNSupertonicTTSImpl::encodeText(
     ptr2[i] = text_mask[i];
   }
 
-  auto outputs = te_module_->onForward(inputs);
+  // Run Inference
+  std::vector<MNN::Express::VARP> outputs = te_module_->onForward(inputs);
 
   if (outputs.empty())
   {
@@ -729,19 +739,7 @@ std::vector<float> MNNSupertonicTTSImpl::estimateVector(
   // Prepare 7 inputs
   std::vector<MNN::Express::VARP> inputs(7);
 
-  // Note: Previous fixes in mnn_estimator.cpp used NCHW.
   // Shapes derived from mnn_estimator.cpp
-
-  // 1. noisy_latent (1, dim, len) -> NCHW from {1, len, dim} ? No.
-  // mnn_estimator.cpp: {1, latent_len, latent_dim} but cast to NCHW?
-  // Wait, my previous fix in mnn_estimator.cpp changed NCHW/NHWC.
-  // Let's assume standard logic:
-  // noisy_latent size = total_latent_size (1 * dim * len)
-  // We need to know len and dim explicitly if we reconstruct shape.
-  // But redundant reconstruction is hard.
-  // Let's check noisy_latent size.
-  // dim = 24 * 6 = 144.
-  // len = size / 144.
   int total_size = static_cast<int>(noisy_latent.size());
   int latent_dim = ldim_ * chunk_compress_factor_;
   int latent_len = total_size / latent_dim;
@@ -761,22 +759,14 @@ std::vector<float> MNNSupertonicTTSImpl::estimateVector(
   ::memcpy(inputs[1]->writeMap<float>(), text_emb.data(),
            text_emb.size() * sizeof(float));
 
-  // Input 2: style_ttl {1, 256} ?? No.
-  // `mnn_estimator.cpp` inputs[2] shape: `{1, 50, 256}` in previous broken
-  // code? No, `synthesize` passes explicit `voice_style.ttl[0]` which was ONE
-  // vector. BUT I fixed `synthesize` to pass flattened `style_ttl_flat`. So
-  // style_ttl here is the FULL flattened vector (12800 floats). The Model input
-  // 2 shape in `mnn_estimator.cpp`: The fix I did changed it to `{1, 50, 256}`
-  // NCHW? Let's check what I wrote in mnn_estimator.cpp via memory? No I can't.
-  // But my task summary says "Vector Estimator Input... fixed... to flatten and
-  // pass entire style vector". So the shape must be {1, 50, 256}.
+  // Input 2: style_ttl {1, 50, 256} NCHW
   inputs[2] = MNN::Express::_Input({1, 50, 256}, NCHW, halide_type_of<float>());
   ::memcpy(inputs[2]->writeMap<float>(), style_ttl.data(),
            style_ttl.size() * sizeof(float));
 
   // Input 3: latent_mask {1, 1, latent_len}
-  inputs[3] = MNN::Express::_Input({1, 1, latent_len}, NCHW,
-                                   halide_type_of<float>()); // float!
+  inputs[3] =
+      MNN::Express::_Input({1, 1, latent_len}, NCHW, halide_type_of<float>());
   auto ptr3 = inputs[3]->writeMap<float>();
   for (int i = 0; i < latent_len; ++i)
     ptr3[i] = static_cast<float>(latent_mask[i]);
@@ -838,24 +828,23 @@ MNNSupertonicTTSImpl::vocode(const std::vector<float> &latent)
   return result;
 }
 
-std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text)
-{
-  // 简化的Process实现，用于兼容基类接口
-  VoiceStyle default_voice({{{0.1f, 0.2f, 0.3f}}}, {{{0.4f, 0.5f, 0.6f}}});
-  auto [audio_float, sample_rate, rtf] =
-      synthesize(text, default_voice, 5, 1.0f);
+// std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text) {
+//   // Simplified Process implementation for compatibility with base class
+//   // interface
+//   VoiceStyle default_voice({{{0.1f, 0.2f, 0.3f}}}, {{{0.4f, 0.5f, 0.6f}}});
+//   auto [audio_float, sample_rate, rtf] =
+//       synthesize(text, default_voice, 10, 1.0f);
 
-  // 转换float到int16_t
-  Audio audio_int16(audio_float.size());
-  for (size_t i = 0; i < audio_float.size(); ++i)
-  {
-    audio_int16[i] = static_cast<int16_t>(audio_float[i] * 32767.0f);
-  }
+//   // Convert float to int16_t
+//   Audio audio_int16(audio_float.size());
+//   for (size_t i = 0; i < audio_float.size(); ++i) {
+//     audio_int16[i] = static_cast<int16_t>(audio_float[i] * 32767.0f);
+//   }
 
-  return std::make_tuple(sample_rate, audio_int16);
-}
+//   return std::make_tuple(sample_rate, audio_int16);
+// }
 
-// 初始化MNN模型
+// Initialize MNN Models
 void MNNSupertonicTTSImpl::initializeModels()
 {
   PLOG(INFO, "Initializing models...");

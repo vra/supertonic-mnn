@@ -17,21 +17,14 @@
 #include "mnn_tts_logger.hpp"
 
 // Voice Style definition moved here
-struct VoiceStyle {
+struct VoiceStyle
+{
   std::vector<std::vector<float>> ttl;
   std::vector<std::vector<float>> dp;
   VoiceStyle() = default;
   VoiceStyle(const std::vector<std::vector<float>> &ttl_data,
              const std::vector<std::vector<float>> &dp_data)
       : ttl(ttl_data), dp(dp_data) {}
-};
-
-struct TTSConfig {
-  std::string model_dir;
-  std::string precision;
-  TTSConfig() : model_dir("."), precision("fp16") {}
-  TTSConfig(const std::string &dir, const std::string &prec)
-      : model_dir(dir), precision(prec) {}
 };
 
 /**
@@ -43,24 +36,18 @@ struct TTSConfig {
  * Vocoder)
  * 3. Audio Synthesis
  */
-class MNNSupertonicTTSImpl : public MNNTTSImplBase {
+class MNNSupertonicTTSImpl : public MNNTTSImplBase
+{
 public:
   MNNSupertonicTTSImpl(const std::string &models_dir,
-                       const std::string &precision_dir,
-                       const std::string &cache_dir);
+                       const std::string &precision_dir);
 
   // Core Synthesis Interface
-  std::tuple<std::vector<float>, int, float>
-  synthesize(const std::string &text, const std::string &voice_name, int steps,
-             float speed, const std::string &language = "en");
+  std::tuple<int, Audio> Process(const std::string &text);
 
   // Overload for internal use or direct style passing
-  std::tuple<std::vector<float>, int, float>
-  synthesize(const std::string &text, const VoiceStyle &voice_style, int steps,
-             float speed);
-
-  // Base Class Interface
-  std::tuple<int, Audio> Process(const std::string &text) override;
+  std::tuple<int, Audio> synthesize(const std::string &text, const VoiceStyle &voice_styl, int steps,
+                                    float speed);
 
   // Save Audio
   static bool save(const std::string &filename,
@@ -88,7 +75,8 @@ private:
   std::shared_ptr<MNN::Express::Module> vc_module_; // Vocoder
 
   // --- Internal Text Processor ---
-  class TextProcessor {
+  class TextProcessor
+  {
   public:
     TextProcessor(const std::string &indexer_path);
     std::vector<int> encode(const std::string &text);
@@ -129,8 +117,7 @@ private:
   // --- Voice Style Management ---
   void loadVoiceStyles();
   void loadVoiceStyle(const std::string &voice_name);
-  std::string preprocessText(const std::string &text,
-                             const std::string &language);
+  std::string preprocessText(const std::string &text);
 
   std::map<std::string, VoiceStyle> voice_styles_;
 };

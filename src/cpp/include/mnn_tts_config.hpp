@@ -46,4 +46,5 @@ public:
   std::string asset_folder_;
   std::string cache_folder_;
   int sample_rate_;
+  std::string precision_;
 };

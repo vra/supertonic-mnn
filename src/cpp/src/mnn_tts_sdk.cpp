@@ -5,7 +5,8 @@
 #include <locale>
 #include <mutex>
 
-MNNTTSSDK::MNNTTSSDK(const std::string &config_folder) {
+MNNTTSSDK::MNNTTSSDK(const std::string &config_folder)
+{
   std::string config_json_path = config_folder + "/config.json";
   auto config = MNNTTSConfig(config_json_path);
   auto model_type = config.model_type_;
@@ -13,29 +14,38 @@ MNNTTSSDK::MNNTTSSDK(const std::string &config_folder) {
   auto assset_folder = config_folder + "/" + config.asset_folder_;
   auto cache_folder = config_folder + "/" + config.cache_folder_;
   sample_rate_ = config.sample_rate_;
-
-  if (model_type == "piper") {
+  if (model_type == "piper")
+  {
     impl_ = nullptr;
     //            std::make_shared<MNNPiperTTSImpl>(assset_folder, model_path,
     //            cache_folder);
-  } else if (model_type == "bertvits") {
+  }
+  else if (model_type == "bertvits")
+  {
     impl_ = nullptr;
     // impl_ = std::make_shared<MNNBertVits2TTSImpl>(assset_folder, model_path,
     // cache_folder);
-  } else if (model_type == "supertonic") {
-    impl_ = std::make_shared<MNNSupertonicTTSImpl>(assset_folder, model_path,
-                                                   cache_folder);
-  } else {
+  }
+  else if (model_type == "supertonic")
+  {
+    auto model_dir = config_folder;
+    std::string precision = config.precision_;
+    impl_ = std::make_shared<MNNSupertonicTTSImpl>(model_dir, precision);
+  }
+  else
+  {
     throw std::runtime_error("Invalid model type");
     return;
   }
 }
-std::tuple<int, Audio> MNNTTSSDK::Process(const std::string &text) {
+std::tuple<int, Audio> MNNTTSSDK::Process(const std::string &text)
+{
   return impl_->Process(text);
 }
 
 void MNNTTSSDK::WriteAudioToFile(const Audio &audio_data,
-                                 const std::string &output_file_path) {
+                                 const std::string &output_file_path)
+{
   std::ofstream audioFile(output_file_path, std::ios::binary);
 
   // Write WAV
