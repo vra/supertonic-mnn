@@ -21,6 +21,7 @@ def ensure_models(target_dir: str = DEFAULT_CACHE_DIR, precision: str = "fp16"):
     precision_dir = os.path.join(models_dir, precision)
 
     required_files = [
+        os.path.join(target_dir, "config.json"),
         os.path.join(precision_dir, "duration_predictor.mnn"),
         os.path.join(precision_dir, "text_encoder.mnn"),
         os.path.join(precision_dir, "vector_estimator.mnn"),
@@ -40,6 +41,12 @@ def ensure_models(target_dir: str = DEFAULT_CACHE_DIR, precision: str = "fp16"):
 
     # Download config files if missing
     try:
+        if not os.path.exists(os.path.join(target_dir, "config.json")):
+            print("Downloading config.json...")
+            hf_hub_download(
+                repo_id=REPO_ID, filename="config.json", local_dir=target_dir
+            )
+
         if not os.path.exists(os.path.join(models_dir, "tts.json")):
             print("Downloading tts.json...")
             hf_hub_download(
@@ -95,6 +102,26 @@ def ensure_models(target_dir: str = DEFAULT_CACHE_DIR, precision: str = "fp16"):
 def load_text_to_speech(
     model_dir: str = DEFAULT_CACHE_DIR, precision: str = "fp16", use_gpu: bool = False
 ) -> TextToSpeech:
+    # Load MNN settings (e.g., backend, thread num, precision, memory type) from config.json
+    mnn_cfg_path = os.path.join(model_dir, "config.json")
+    mnn_cfg = dict()
+    mnn_backend_mapping = {
+        'cpu': 0,
+        'metal': 1,
+        'cuda': 2,
+        'opencl': 3,
+        'opengl': 6,
+        'vulkan': 7,
+        'hiai': 8,
+        'trt': 9,
+    }
+    with open(mnn_cfg_path, "r") as f:
+        data = json.load(f)
+        mnn_cfg["backend"] = mnn_backend_mapping[data['mnn_cfg_backend']]
+        mnn_cfg["thread_num"] = data['mnn_cfg_thread_num']
+        mnn_cfg["precision"] = data['mnn_cfg_precision']
+        mnn_cfg["memory"] = data['mnn_cfg_memory']
+
     # New structure: mnn_models/{precision}/*.mnn
     models_dir = os.path.join(model_dir, "mnn_models")
     precision_dir = os.path.join(models_dir, precision)
@@ -111,9 +138,9 @@ def load_text_to_speech(
     vocoder_path = os.path.join(precision_dir, "vocoder.mnn")
 
     # Define input/output names
-    dp_ort = load_mnn(dp_path, ["text_ids", "style_dp", "text_mask"], ["duration"])
+    dp_ort = load_mnn(dp_path, ["text_ids", "style_dp", "text_mask"], ["duration"], mnn_cfg)
     text_enc_ort = load_mnn(
-        text_enc_path, ["text_ids", "style_ttl", "text_mask"], ["text_emb"]
+        text_enc_path, ["text_ids", "style_ttl", "text_mask"], ["text_emb"], mnn_cfg
     )
 
     # Note: vector_est_ort input names must match the order expected by the model
@@ -130,9 +157,10 @@ def load_text_to_speech(
             "total_step",
         ],
         ["denoised_latent"],
+        mnn_cfg,
     )
 
-    vocoder_ort = load_mnn(vocoder_path, ["latent"], ["wav_tts"])
+    vocoder_ort = load_mnn(vocoder_path, ["latent"], ["wav_tts"], mnn_cfg)
 
     # Load Text Processor
     unicode_indexer_path = os.path.join(models_dir, "unicode_indexer.json")

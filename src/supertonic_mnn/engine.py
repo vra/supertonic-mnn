@@ -6,11 +6,7 @@ from .text import UnicodeProcessor, length_to_mask, chunk_text
 
 
 class MNNInference:
-    def __init__(self, model_path, input_names, output_names) -> None:
-        config = dict()
-        config["backend"] = 0
-        config["precision"] = "low"
-        config["memory"] = "low"
+    def __init__(self, model_path, input_names, output_names, config) -> None:
 
         rt = MNN.nn.create_runtime_manager((config,))
 
@@ -97,10 +93,10 @@ class TextToSpeech:
             len(text_list) == style.ttl.shape[0]
         ), "Number of texts must match number of style vectors"
         bsz = len(text_list)
-        
+
         # Start timing for RTF calculation
         start_time = time.time()
-        
+
         text_ids, text_mask = self.text_processor(text_list)
         dur_onnx, *_ = self.dp_ort.run(
             None, {"text_ids": text_ids, "style_dp": style.dp, "text_mask": text_mask}
@@ -127,10 +123,10 @@ class TextToSpeech:
                 },
             )
         wav, *_ = self.vocoder_ort.run(None, {"latent": xt})
-        
+
         # Calculate elapsed time for RTF
         elapsed_time = time.time() - start_time
-        
+
         return wav, dur_onnx, elapsed_time
 
     def __call__(
@@ -148,11 +144,11 @@ class TextToSpeech:
         wav_cat = None
         dur_cat = None
         total_elapsed_time = 0.0
-        
+
         for text in text_list:
             wav, dur_onnx, elapsed_time = self._infer([text], style, total_step, speed)
             total_elapsed_time += elapsed_time
-            
+
             if wav_cat is None:
                 wav_cat = wav
                 dur_cat = dur_onnx
@@ -162,16 +158,16 @@ class TextToSpeech:
                 )
                 wav_cat = np.concatenate([wav_cat, silence, wav], axis=1)
                 dur_cat += dur_onnx + silence_duration
-                
+
         # Calculate overall RTF
         total_audio_duration = wav_cat.shape[1] / self.sample_rate
         rtf = total_elapsed_time / total_audio_duration if total_audio_duration > 0 else 0.0
-        
+
         # Print RTF information
         print(f"RTF (Real Time Factor): {rtf:.4f}")
         print(f"Audio Duration: {total_audio_duration:.2f}s")
         print(f"Generation Time: {total_elapsed_time:.2f}s")
-        
+
         return wav_cat, dur_cat, rtf
 
 
@@ -187,13 +183,13 @@ class TextToSpeech:
             style.ttl.shape[0] == 1
         ), "Single speaker text to speech only supports single style"
         text_list = chunk_text(text)
-        
+
         for i, text_chunk in enumerate(text_list):
             wav, dur_onnx, elapsed_time = self._infer([text_chunk], style, total_step, speed)
-            
+
             # Yield the generated audio chunk
             yield wav, dur_onnx, elapsed_time
-            
+
             # Yield silence if it's not the last chunk
             if i < len(text_list) - 1:
                 silence = np.zeros(
@@ -211,8 +207,8 @@ def get_latent_mask(
     return latent_mask
 
 
-def load_mnn(model_path, input_names, output_names):
-    return MNNInference(model_path, input_names, output_names)
+def load_mnn(model_path, input_names, output_names, config):
+    return MNNInference(model_path, input_names, output_names, config)
 
 
 def load_voice_style(voice_style_paths: list[str], verbose: bool = False) -> Style:

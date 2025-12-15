@@ -10,7 +10,8 @@ dependencies = [
     "soundfile",
     "huggingface_hub",
     "tqdm",
-    "requests"
+    "requests",
+    "sounddevice>=0.5.3",
 ]
 
 [project.scripts]

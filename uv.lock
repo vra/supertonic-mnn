@@ -863,6 +863,21 @@ wheels = [
 ]
 
 [[package]]
+name = "sounddevice"
+version = "0.5.3"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
+dependencies = [
+    { name = "cffi" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/4e/4f/28e734898b870db15b6474453f19813d3c81b91c806d9e6f867bd6e4dd03/sounddevice-0.5.3.tar.gz", hash = "sha256:cbac2b60198fbab84533697e7c4904cc895ec69d5fb3973556c9eb74a4629b2c" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/73/e7/9020e9f0f3df00432728f4c4044387468a743e3d9a4f91123d77be10010e/sounddevice-0.5.3-py3-none-any.whl", hash = "sha256:ea7738baa0a9f9fef7390f649e41c9f2c8ada776180e56c2ffd217133c92a806" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/2f/39/714118f8413e0e353436914f2b976665161f1be2b6483ac15a8f61484c14/sounddevice-0.5.3-py3-none-macosx_10_6_x86_64.macosx_10_6_universal2.whl", hash = "sha256:278dc4451fff70934a176df048b77d80d7ce1623a6ec9db8b34b806f3112f9c2" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/f5/74/52186e3e5c833d00273f7949a9383adff93692c6e02406bf359cb4d3e921/sounddevice-0.5.3-py3-none-win32.whl", hash = "sha256:845d6927bcf14e84be5292a61ab3359cf8e6b9145819ec6f3ac2619ff089a69c" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/66/c7/16123d054aef6d445176c9122bfbe73c11087589b2413cab22aff5a7839a/sounddevice-0.5.3-py3-none-win_amd64.whl", hash = "sha256:f55ad20082efc2bdec06928e974fbcae07bc6c405409ae1334cefe7d377eb687" },
+]
+
+[[package]]
 name = "soundfile"
 version = "0.13.1"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
@@ -894,6 +909,7 @@ dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version == '3.10.*'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11'" },
     { name = "requests" },
+    { name = "sounddevice" },
     { name = "soundfile" },
     { name = "tqdm" },
 ]
@@ -911,6 +927,7 @@ requires-dist = [
     { name = "mnn", specifier = ">=2.0.0" },
     { name = "numpy" },
     { name = "requests" },
+    { name = "sounddevice", specifier = ">=0.5.3" },
     { name = "soundfile" },
     { name = "tqdm" },
 ]
