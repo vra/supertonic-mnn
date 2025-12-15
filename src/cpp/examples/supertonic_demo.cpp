@@ -4,7 +4,7 @@
  */
 
 #include "mnn_tts_logger.hpp"
-#include "supertonic/supertonic.hpp"
+#include "supertonic/mnn_supertonic_tts_impl.hpp"
 #include <chrono>
 #include <iostream>
 
@@ -23,7 +23,9 @@ int main() {
 
     // 初始化TTS引擎
     auto t0 = clk::now();
-    SupertonicTTS tts(config);
+    // MNNSupertonicTTSImpl(model_dir, precision, cache_dir)
+    MNNSupertonicTTSImpl tts(config.model_dir, config.precision,
+                             config.model_dir + "/cache");
     auto t1 = clk::now();
 
     auto d1 = std::chrono::duration_cast<ms>(t1 - t0);
@@ -31,7 +33,7 @@ int main() {
                    " ms");
 
     // 测试文本
-    std::string text = "Nice to meet you";
+    std::string text = "It’s nice to have shortcuts for commands you use often. To have normalized names for installing dependencies, running the code, or starting the tests across all your projects.";
     std::string voice = "F1";
 
     // 文本转语音
@@ -49,7 +51,7 @@ int main() {
 
     // 保存音频文件
     std::string output_file = "output.wav";
-    if (SupertonicTTS::save(output_file, audio_data, sample_rate)) {
+    if (MNNSupertonicTTSImpl::save(output_file, audio_data, sample_rate)) {
       PLOG(INFO, "Audio saved to: " + output_file);
     } else {
       PLOG(ERROR, "Failed to save audio file!");

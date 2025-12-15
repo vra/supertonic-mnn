@@ -7,14 +7,34 @@
 #include <tuple>
 #include <vector>
 
-#include "mnn_tts_impl_base.hpp"
-#include "mnn_tts_logger.hpp"
-#include "supertonic.hpp"
-
 #include <MNN/expr/Executor.hpp>
 #include <MNN/expr/ExecutorScope.hpp>
 #include <MNN/expr/Expr.hpp>
+#include <MNN/expr/ExprCreator.hpp>
 #include <MNN/expr/Module.hpp>
+
+#include "mnn_tts_impl_base.hpp"
+#include "mnn_tts_logger.hpp"
+
+// Voice Style definition moved here
+struct VoiceStyle
+{
+  std::vector<std::vector<float>> ttl;
+  std::vector<std::vector<float>> dp;
+  VoiceStyle() = default;
+  VoiceStyle(const std::vector<std::vector<float>> &ttl_data,
+             const std::vector<std::vector<float>> &dp_data)
+      : ttl(ttl_data), dp(dp_data) {}
+};
+
+struct TTSConfig
+{
+  std::string model_dir;
+  std::string precision;
+  TTSConfig() : model_dir("."), precision("fp16") {}
+  TTSConfig(const std::string &dir, const std::string &prec)
+      : model_dir(dir), precision(prec) {}
+};
 
 /**
  * @brief MNN C++ implementation of Supertonic TTS.
@@ -25,26 +45,38 @@
  * Vocoder)
  * 3. Audio Synthesis
  */
-class MNNSupertonicTTSImpl : public MNNTTSImplBase {
+class MNNSupertonicTTSImpl : public MNNTTSImplBase
+{
 public:
   MNNSupertonicTTSImpl(const std::string &models_dir,
                        const std::string &precision_dir,
                        const std::string &cache_dir);
 
   // Core Synthesis Interface
-  // Note: VoiceStyle is defined in 'supertonic.hpp'
+  // Note: VoiceStyle is defined locally now
+  std::tuple<std::vector<float>, int, float>
+  synthesize(const std::string &text, const std::string &voice_name, int steps,
+             float speed, const std::string &language = "en");
+
+  // Overload for internal use or direct style passing
   std::tuple<std::vector<float>, int, float>
   synthesize(const std::string &text, const VoiceStyle &voice_style, int steps,
-             float speed) override;
+             float speed);
 
   // Base Class Interface
   std::tuple<int, Audio> Process(const std::string &text) override;
+
+  // Save Audio
+  static bool save(const std::string &filename,
+                   const std::vector<float> &audio_data, int sample_rate);
 
 private:
   // --- Configuration ---
   std::string models_dir_;
   std::string precision_dir_;
   std::string cache_dir_;
+
+  std::vector<std::string> voice_ids_ = {"M1", "M2", "F1", "F2"};
   int sample_rate_;
   int base_chunk_size_;
   int chunk_compress_factor_;
@@ -60,11 +92,11 @@ private:
   std::shared_ptr<MNN::Express::Module> vc_module_; // Vocoder
 
   // --- Internal Text Processor ---
-  class TextProcessor {
+  class TextProcessor
+  {
   public:
     TextProcessor(const std::string &indexer_path);
     std::vector<int> encode(const std::string &text);
-    std::string decode(const std::vector<int> &indices);
 
   private:
     std::map<uint16_t, int> unicode_to_index_;
@@ -99,6 +131,13 @@ private:
 
   // Vocode latent vector to audio
   std::vector<float> vocode(const std::vector<float> &latent);
+  // --- Voice Style Management ---
+  void loadVoiceStyles();
+  void loadVoiceStyle(const std::string &voice_name);
+  std::string preprocessText(const std::string &text,
+                             const std::string &language);
+
+  std::map<std::string, VoiceStyle> voice_styles_;
 };
 
 #endif // _HEADER_MNN_SUPERTONIC_TTS_IMPL_H_

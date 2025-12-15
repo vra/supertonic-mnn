@@ -112,6 +112,6 @@ set(SHARED_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/mnn_tts_sdk.cpp
     ${CMAKE_SOURCE_DIR}/src/utils.cpp
     ${CMAKE_SOURCE_DIR}/src/supertonic/mnn_supertonic_tts_impl.cpp
-    ${CMAKE_SOURCE_DIR}/src/supertonic/supertonic.cpp
+    ${CMAKE_SOURCE_DIR}/src/supertonic/mnn_supertonic_tts_impl.cpp
 )
 add_subdirectory(examples)
