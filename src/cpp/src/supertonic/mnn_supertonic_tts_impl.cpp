@@ -417,9 +417,22 @@ MNNSupertonicTTSImpl::synthesize(const std::string &text,
   std::cout << "duration: " << std::endl;
 
   // 4. 文本编码
+  // Use the FULL ttl vector for text encoder (handled by MNNTextEncoder::encode
+  // which we just fixed)
   auto text_emb = encodeText(text_ids, voice_style.ttl, text_mask);
 
   // 5. 向量估计
+  // Flatten style.ttl for Vector Estimator (which takes 1D)
+  std::vector<float> style_ttl_flat;
+  if (!voice_style.ttl.empty()) {
+    int ttl_dim0 = voice_style.ttl.size();
+    int ttl_dim1 = voice_style.ttl[0].size();
+    style_ttl_flat.reserve(ttl_dim0 * ttl_dim1);
+    for (const auto &vec : voice_style.ttl) {
+      style_ttl_flat.insert(style_ttl_flat.end(), vec.begin(), vec.end());
+    }
+  }
+
   // Sample noisy latent matchng Python logic:
   // bsz = len(duration) (1 here)
   // wav_len_max = duration.max() * self.sample_rate
@@ -429,112 +442,19 @@ MNNSupertonicTTSImpl::synthesize(const std::string &text,
   // latent_dim = self.ldim * self.chunk_compress_factor
 
   // Only 1 item in batch
-  float duration_val = 0;
-  if (!duration.empty())
-    duration_val =
-        duration[0]; // Wait, duration is vector<float> of length 1 per predict?
-  // predictDuration returns (1, sequence_length) usually?
-  // Python: dur_onnx, *_ = self.dp_ort.run(...)
-  // dur_onnx is (B, T)
-  // duration here is what?
-  // MNNSupertonicTTSImpl::predictDuration returns std::vector<float>.
-  // Assuming it's flattened duration prediction for the text sequence.
-
-  // Python Logic:
-  // wav_len_max = duration.max() * sample_rate (if duration is sum of
-  // durations? No duration is per token) Wait, Python's duration is sum?
-  // `wav_len_max = duration.max() * self.sample_rate` -> this implies duration
-  // is NOT per token logic here? Ah, `dur_onnx` is likely the *total duration*?
-  // Let's check Python engine.py again.
-  // `dur_onnx, *_ = self.dp_ort.run(...)`
-  // `dur_onnx = dur_onnx / speed`
-  // `xt, latent_mask = self.sample_noisy_latent(dur_onnx)`
-  // In `sample_noisy_latent(duration)`: `wav_len_max = duration.max() *
-  // self.sample_rate`. If input is (Batch, ), then duration.max() is max total
-  // duration in batch. So `dur_onnx` MUST be (Batch,) containing TOTAL duration
-  // in seconds. Let's check generic DP output. Usually DP predicts logical
-  // duration per token. But here `dur_onnx` seems to be total duration? Or
-  // maybe `duration` argument is actually `dur_onnx.sum(dim=-1)`? CHECK
-  // ENGINE.PY AGAIN. It passes `dur_onnx` directly. So `dp_ort` output is just
-  // a single float per batch item? Or is DP a model that predicts total
-  // duration? Usually DP predicts per-phoneme duration. If it predicts
-  // per-phoneme, `duration` arg to sample_noisy_latent would be (B, T).
-  // `duration.max()` on (B, T) would be max duration of a SINGLE phoneme? That
-  // makes no sense `* sample_rate` -> `wav_len`. A single phoneme duration *
-  // sample rate is not the wav length. So `dur_onnx` MUST be "total duration".
-  // OR `duration` is expected to be sum.
-  // Let's check engine.py line 111: `dur_onnx, *_ = self.dp_ort.run(...)`.
-  // If `dur_onnx` denotes per-token duration, then `sample_noisy_latent` logic
-  // is weird unless `duration` passed IS the sum? Wait, `sample_noisy_latent`
-  // takes `duration`. In `_infer`: `xt, latent_mask =
-  // self.sample_noisy_latent(dur_onnx)`. If `dur_onnx` is per-token, then
-  // `wav_lengths = (duration * sample_rate)` -> array of shape (B, T).
-  // `latent_len = ...`.
-  // This implies `sample_noisy_latent` logic generates latent matching EACH
-  // token's duration? NO. `latent_len` calculation suggests it calculates ONE
-  // length for the whole sequence. This implies `dur_onnx` is (B, 1) or (B,)
-  // representing TOTAL duration. OR `duration.max()` implies max across Batch
-  // of the SUM? No. Let's assume `dur_onnx` is indeed just the Total Duration
-  // in seconds. Let's verify MNN Duration Predictor model output shape in C++.
-  // `predictDuration` implementation returns `vector<float>`.
-
-  // In my previous `mnn_duration_predictor.cpp` (not viewed but user said it's
-  // good), what does it return? Let's assume it returns per-token duration. If
-  // so, I need to SUM it. But if `dp` model output IS the sum, then it's fine.
-  // Most TTS (VITS etc) DP predicts log-duration per token.
-  // The Python code `dur_onnx = dur_onnx / speed` is simple division.
-
-  // CRITICAL: Check `mnn_duration_predictor.cpp` output.
-  // I can't guess. I'll read it in next step if I can't decide.
-  // But wait, `sample_noisy_latent` line 84: `wav_len_max = duration.max() *
-  // self.sample_rate`. If duration is `[0.1, 0.2, 0.1]`, `max()` is `0.2`. `0.2
-  // * 24000` = 4800 samples. `latent_len` would be very small. `noisy_latent`
-  // would be `(B, Dim, small_len)`. But `text_emb_onnx` is `(B, T, Dim)`.
-  // `vector_est_ort.run` takes `text_emb`, `noisy_latent`.
-  // Flow matching usually requires `noisy_latent` and `text_emb` to have
-  // compatible shapes or attention? If `noisy_latent` is the target Mel frames
-  // (compressed), its length should correspond to Total Audio Duration. So
-  // `duration` passed to `sample_noisy_latent` MUST be the Total Duration.
-  // Which means `dur_onnx` from DP must be Total Duration.
-  // OR `dur_onnx` in Python is summed before passing?
-  // See `engine.py`:
-  // `dur_onnx, *_ = self.dp_ort.run(...)`
-  // `dur_onnx = dur_onnx / speed`
-  // `xt, latent_mask = self.sample_noisy_latent(dur_onnx)`
-  // No sum.
-  // CONSTUSION: Maybe the DP model in this "Supertonic" (Flow Matching)
-  // *predicts* the total duration directly? That's possible for some
-  // architectures. Let's assume `duration` is vector of size 1 containing total
-  // seconds.
-
   float total_duration_sec = 0.0f;
-  for (float d : duration)
-    total_duration_sec += d; // If it returns per-token, we might need sum.
-  // But if it returns single value, loop is fine.
-  // Let's assume safety: sum it up.
-
-  if (duration.size() > 1) {
-    // Warning: if duration is per-token, logic depends on context.
-    // But if Python code `duration.max()` works on a per-token array, it would
-    // take the longest token duration. That seems wrong for generating the
-    // *whole* latent. So `dur_onnx` MUST be a single value (or (B,1)). So
-    // `duration` vector should effectively have 1 element. Unless `duration` is
-    // [total_dur_b1, total_dur_b2...]. Since we process 1 text, we expect 1
-    // value.
-  }
-
-  // Re-check `engine.py` line 25: `value = input_dict[key]`
-  // DP inputs: text_ids, style_dp.
-  // If DP predicts total duration, fine.
-
-  // Calculation:
-  total_duration_sec =
-      duration[0]; // Assume 1st element is duration (or unique element)
+  if (!duration.empty())
+    total_duration_sec =
+        duration[0]; // Assume 1st element is duration (or unique element)
 
   int wav_len = static_cast<int>(total_duration_sec * sample_rate_);
   int base_chunk = base_chunk_size_ * chunk_compress_factor_;
   int latent_len = (wav_len + base_chunk - 1) / base_chunk;
   int latent_dim = ldim_ * chunk_compress_factor_;
+
+  // Ensure latent_len is at least 1
+  if (latent_len < 1)
+    latent_len = 1;
 
   int total_latent_size = 1 * latent_dim * latent_len;
 
@@ -548,34 +468,14 @@ MNNSupertonicTTSImpl::synthesize(const std::string &text,
   }
 
   // Latent mask
-  // Python: get_latent_mask(wav_lengths, ...)
-  // wav_lengths = [wav_len]
-  // mask logic:
-  // latent_lengths = (wav_lengths + latent_size - 1) // latent_size
-  // mask = length_to_mask(latent_lengths)
-  // Since we compute latent_len using the same formula, the mask is all 1s for
-  // the valid length. And since our tensor IS the valid length (no padding for
-  // batch > 1), mask is all 1s.
-  std::vector<int> latent_mask(latent_len,
-                               1); // Shape: (1, 1, latent_len) flattened?
-  // Python: mask shape (B, 1, max_len). i.e. (1, 1, latent_len).
-  // In C++ MNN `_Const` often takes flattened data.
-  // But latent_mask passed to `estimateVector` needs to be correct size.
-  // The previous implementation used `std::vector<int>
-  // latent_mask(noisy_latent.size(), 1);` which is WRONG (dim mismatch). It
-  // should be (1, 1, latent_len). So vector size = latent_len.
   std::vector<int> latent_mask_vec(latent_len, 1);
-
-  // Apply mask to noisy_latent?
-  // Python: `noisy_latent = noisy_latent * latent_mask`.
-  // Since mask is all 1, no op needed if size matches.
 
   // 执行多步估计
   std::vector<float> estimated = noisy_latent;
   for (int step = 0; step < steps; ++step) {
     // Note: estimateVector signature might need update if I changed logic?
     // It takes `latent_mask`.
-    estimated = estimateVector(estimated, text_emb, voice_style.ttl[0],
+    estimated = estimateVector(estimated, text_emb, style_ttl_flat,
                                latent_mask_vec, text_mask, step, steps);
   }
 
