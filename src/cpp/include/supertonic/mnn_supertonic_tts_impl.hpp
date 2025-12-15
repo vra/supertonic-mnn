@@ -17,8 +17,7 @@
 #include "mnn_tts_logger.hpp"
 
 // Voice Style definition moved here
-struct VoiceStyle
-{
+struct VoiceStyle {
   std::vector<std::vector<float>> ttl;
   std::vector<std::vector<float>> dp;
   VoiceStyle() = default;
@@ -27,8 +26,7 @@ struct VoiceStyle
       : ttl(ttl_data), dp(dp_data) {}
 };
 
-struct TTSConfig
-{
+struct TTSConfig {
   std::string model_dir;
   std::string precision;
   TTSConfig() : model_dir("."), precision("fp16") {}
@@ -45,15 +43,13 @@ struct TTSConfig
  * Vocoder)
  * 3. Audio Synthesis
  */
-class MNNSupertonicTTSImpl : public MNNTTSImplBase
-{
+class MNNSupertonicTTSImpl : public MNNTTSImplBase {
 public:
   MNNSupertonicTTSImpl(const std::string &models_dir,
                        const std::string &precision_dir,
                        const std::string &cache_dir);
 
   // Core Synthesis Interface
-  // Note: VoiceStyle is defined locally now
   std::tuple<std::vector<float>, int, float>
   synthesize(const std::string &text, const std::string &voice_name, int steps,
              float speed, const std::string &language = "en");
@@ -92,8 +88,7 @@ private:
   std::shared_ptr<MNN::Express::Module> vc_module_; // Vocoder
 
   // --- Internal Text Processor ---
-  class TextProcessor
-  {
+  class TextProcessor {
   public:
     TextProcessor(const std::string &indexer_path);
     std::vector<int> encode(const std::string &text);
