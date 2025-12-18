@@ -4,6 +4,10 @@
 [![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-blue)](https://vra.github.io/supertonic-mnn/)
 [![PyPI](https://img.shields.io/pypi/v/supertonic-mnn)](https://pypi.org/project/supertonic-mnn/)
 
+Demo video:
+
+<iframe src="//player.bilibili.com/player.html?isOutside=true&aid=115732088161818&bvid=BV1VFqiBSER3&cid=34785791445&p=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe>
+
 [English](#english) | [中文](#中文)
 
 ---
