@@ -57,13 +57,13 @@ uv run python app.py
 
 ```bash
 # English (default)
-echo "Hello world" | supertonic-mnn -o hello.wav
+echo "Hello world" | uv run supertonic-mnn -o hello.wav
 
 # Korean
-echo "안녕하세요" | supertonic-mnn --lang ko -o hello_ko.wav
+echo "안녕하세요" | uv run supertonic-mnn --lang ko -o hello_ko.wav
 
 # Japanese with v3 model, female voice
-echo "こんにちは" | supertonic-mnn --lang ja --version v3 --voice F1 -o hello_ja.wav
+echo "こんにちは" | uv run supertonic-mnn --lang ja --version v3 --voice F1 -o hello_ja.wav
 ```
 
 #### Python API
@@ -146,13 +146,13 @@ uv run python app.py
 
 ```bash
 # 英语（默认）
-echo "Hello world" | supertonic-mnn -o hello.wav
+echo "Hello world" | uv run supertonic-mnn -o hello.wav
 
 # 韩语
-echo "안녕하세요" | supertonic-mnn --lang ko -o hello_ko.wav
+echo "안녕하세요" | uv run supertonic-mnn --lang ko -o hello_ko.wav
 
 # 日语，v3 模型，女声
-echo "こんにちは" | supertonic-mnn --lang ja --version v3 --voice F1 -o hello_ja.wav
+echo "こんにちは" | uv run supertonic-mnn --lang ja --version v3 --voice F1 -o hello_ja.wav
 ```
 
 #### Python API
