@@ -11,36 +11,39 @@ class SupertonicTTS:
 
     Usage:
         tts = SupertonicTTS()
-        audio, sample_rate = tts.synthesize("Hello world")
+        audio, sample_rate = tts.synthesize("Hello world", lang="en")
         tts.save("output.wav", audio, sample_rate)
     """
 
-    def __init__(self, model_dir: str = DEFAULT_CACHE_DIR, precision: str = "fp16"):
+    def __init__(self, model_dir: str = DEFAULT_CACHE_DIR, precision: str = "fp16", version: str = "v3"):
         """
         Initialize the TTS engine.
 
         Args:
             model_dir (str): Directory to store/load models.
             precision (str): Model precision ('fp16', 'fp32', 'int8').
+            version (str): Model version ('v1', 'v2', 'v3'). Default: 'v3'.
         """
         self.model_dir = model_dir
         self.precision = precision
+        self.version = version
         self.engine = None
         self.voice_styles = {}
 
         # Ensure models are available upon initialization
-        ensure_models(self.model_dir, self.precision)
+        ensure_models(self.model_dir, self.precision, self.version)
 
     def _get_engine(self):
         """Lazily loads the TTS engine."""
         if self.engine is None:
-            self.engine = load_text_to_speech(self.model_dir, self.precision)
+            self.engine = load_text_to_speech(self.model_dir, self.precision, version=self.version)
         return self.engine
 
     def synthesize(
         self,
         text: str,
         voice: str = "M1",
+        lang: str = "en",
         steps: int = 5,
         speed: float = 1.0,
         output_file: Optional[str] = None
@@ -51,6 +54,7 @@ class SupertonicTTS:
         Args:
             text (str): Text to synthesize.
             voice (str): Voice style name (e.g., 'M1', 'F1') or path to style JSON.
+            lang (str): Language code (e.g., 'en', 'ko', 'ja'). Default: 'en'.
             steps (int): Number of diffusion steps (default 5).
             speed (float): Speech speed (default 1.0).
             output_file (str, optional): Path to save the output audio file.
@@ -62,12 +66,12 @@ class SupertonicTTS:
 
         # Load or retrieve voice style
         if voice not in self.voice_styles:
-            style_path = get_voice_style_path(voice, self.model_dir)
+            style_path = get_voice_style_path(voice, self.model_dir, self.version)
             self.voice_styles[voice] = load_voice_style([style_path])
 
         style = self.voice_styles[voice]
 
-        wav, duration, rtf = engine(text, style, total_step=steps, speed=speed)
+        wav, duration, rtf = engine(text, lang, style, total_step=steps, speed=speed)
 
         wav_data = wav[0]
         sample_rate = engine.sample_rate
@@ -81,6 +85,7 @@ class SupertonicTTS:
         self,
         text: str,
         voice: str = "M1",
+        lang: str = "en",
         steps: int = 5,
         speed: float = 1.0,
     ):
@@ -90,6 +95,7 @@ class SupertonicTTS:
         Args:
             text (str): Text to synthesize.
             voice (str): Voice style name.
+            lang (str): Language code (e.g., 'en', 'ko', 'ja'). Default: 'en'.
             steps (int): Number of diffusion steps.
             speed (float): Speech speed.
 
@@ -100,12 +106,12 @@ class SupertonicTTS:
 
         # Load or retrieve voice style
         if voice not in self.voice_styles:
-            style_path = get_voice_style_path(voice, self.model_dir)
+            style_path = get_voice_style_path(voice, self.model_dir, self.version)
             self.voice_styles[voice] = load_voice_style([style_path])
 
         style = self.voice_styles[voice]
 
-        stream_gen = engine.stream(text, style, total_step=steps, speed=speed)
+        stream_gen = engine.stream(text, lang, style, total_step=steps, speed=speed)
 
         sample_rate = engine.sample_rate
 

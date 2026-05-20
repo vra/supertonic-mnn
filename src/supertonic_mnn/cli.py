@@ -13,9 +13,9 @@ from .model import (
 
 
 def sanitize_filename(text: str, max_len: int = 20) -> str:
-    """Sanitize filename by replacing non-alphanumeric characters with underscores"""
+    """Sanitize filename by replacing non-alphanumeric characters with underscores (supports Unicode)"""
     prefix = text[:max_len]
-    return re.sub(r"[^a-zA-Z0-9]", "_", prefix)
+    return re.sub(r"[^\w]", "_", prefix, flags=re.UNICODE)
 
 
 def main():
@@ -70,6 +70,21 @@ def main():
         help="Model precision: fp32, fp16, or int8. Default: fp16",
     )
 
+    parser.add_argument(
+        "--lang",
+        type=str,
+        default="en",
+        help="Language code (e.g., en, ko, ja, fr, de). Default: en",
+    )
+
+    parser.add_argument(
+        "--version",
+        type=str,
+        choices=["v1", "v2", "v3"],
+        default="v3",
+        help="Model version: v1, v2, or v3. Default: v3",
+    )
+
     args = parser.parse_args()
 
     # Handle input text
@@ -98,22 +113,22 @@ def main():
 
     # 1. Ensure models are present
     try:
-        ensure_models(args.model_dir, args.precision)
+        ensure_models(args.model_dir, args.precision, args.version)
     except Exception as e:
         print(f"Error downloading models: {e}")
         return
 
     # 2. Load TTS Engine
-    print(f"Loading TTS engine with precision={args.precision}...")
+    print(f"Loading TTS engine with precision={args.precision}, version={args.version}...")
     try:
-        tts = load_text_to_speech(args.model_dir, args.precision)
+        tts = load_text_to_speech(args.model_dir, args.precision, version=args.version)
     except Exception as e:
         print(f"Error loading engine: {e}")
         return
 
     # 3. Load Voice Style
     try:
-        style_path = get_voice_style_path(args.voice, args.model_dir)
+        style_path = get_voice_style_path(args.voice, args.model_dir, args.version)
         print(f"Using voice style: {style_path}")
         style = load_voice_style([style_path])
     except Exception as e:
@@ -130,7 +145,7 @@ def main():
         for idx, text in enumerate(texts, 1):
             print(f"Synthesizing line {idx}/{len(texts)}: '{text[:50]}{'...' if len(text) > 50 else ''}'")
             try:
-                wav, duration, rtf = tts(text, style, args.steps, args.speed)
+                wav, duration, rtf = tts(text, args.lang, style, args.steps, args.speed)
                 
                 # Generate output filename
                 if len(texts) == 1:
@@ -152,7 +167,7 @@ def main():
         text = texts[0]
         print(f"Synthesizing text: '{text[:50]}{'...' if len(text) > 50 else ''}'")
         try:
-            wav, duration, rtf = tts(text, style, args.steps, args.speed)
+            wav, duration, rtf = tts(text, args.lang, style, args.steps, args.speed)
 
             # Save output
             wav_data = wav[0]

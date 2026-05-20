@@ -1,14 +1,14 @@
 [project]
 name = "supertonic-mnn"
-version = "0.1.3"
-description = "CLI tool for Supertonic MNN inference"
+version = "0.2.0"
+description = "High-performance multilingual TTS with MNN inference (Supertonic v2/v3)"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "MNN>=2.0.0",
+    "MNN>=3.0.0",
     "numpy",
     "soundfile",
-    "huggingface_hub",
+    "huggingface-hub",
     "tqdm",
     "requests",
     "sounddevice>=0.5.3",
@@ -25,4 +25,7 @@ build-backend = "hatchling.build"
 dev = [
     "pytest",
     "pytest-mock",
+]
+demo = [
+    "gradio>=4.0",
 ]

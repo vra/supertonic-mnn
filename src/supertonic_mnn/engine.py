@@ -87,7 +87,7 @@ class TextToSpeech:
         return noisy_latent, latent_mask
 
     def _infer(
-        self, text_list: list[str], style: Style, total_step: int, speed: float = 1.05
+        self, text_list: list[str], lang_list: list[str], style: Style, total_step: int, speed: float = 1.05
     ) -> tuple[np.ndarray, np.ndarray, float]:
         assert (
             len(text_list) == style.ttl.shape[0]
@@ -97,7 +97,7 @@ class TextToSpeech:
         # Start timing for RTF calculation
         start_time = time.time()
 
-        text_ids, text_mask = self.text_processor(text_list)
+        text_ids, text_mask = self.text_processor(text_list, lang_list)
         dur_onnx, *_ = self.dp_ort.run(
             None, {"text_ids": text_ids, "style_dp": style.dp, "text_mask": text_mask}
         )
@@ -132,6 +132,7 @@ class TextToSpeech:
     def __call__(
         self,
         text: str,
+        lang: str,
         style: Style,
         total_step: int,
         speed: float = 1.05,
@@ -140,13 +141,14 @@ class TextToSpeech:
         assert (
             style.ttl.shape[0] == 1
         ), "Single speaker text to speech only supports single style"
-        text_list = chunk_text(text)
+        max_len = 120 if lang in ("ko", "ja") else 300
+        text_list = chunk_text(text, max_len=max_len)
         wav_cat = None
         dur_cat = None
         total_elapsed_time = 0.0
 
         for text in text_list:
-            wav, dur_onnx, elapsed_time = self._infer([text], style, total_step, speed)
+            wav, dur_onnx, elapsed_time = self._infer([text], [lang], style, total_step, speed)
             total_elapsed_time += elapsed_time
 
             if wav_cat is None:
@@ -174,6 +176,7 @@ class TextToSpeech:
     def stream(
         self,
         text: str,
+        lang: str,
         style: Style,
         total_step: int,
         speed: float = 1.05,
@@ -182,10 +185,11 @@ class TextToSpeech:
         assert (
             style.ttl.shape[0] == 1
         ), "Single speaker text to speech only supports single style"
-        text_list = chunk_text(text)
+        max_len = 120 if lang in ("ko", "ja") else 300
+        text_list = chunk_text(text, max_len=max_len)
 
         for i, text_chunk in enumerate(text_list):
-            wav, dur_onnx, elapsed_time = self._infer([text_chunk], style, total_step, speed)
+            wav, dur_onnx, elapsed_time = self._infer([text_chunk], [lang], style, total_step, speed)
 
             # Yield the generated audio chunk
             yield wav, dur_onnx, elapsed_time

@@ -218,3 +218,5 @@ __marimo__/
 # custom
 *.DS_Store
 *.wav
+converted_models/
+issues/

@@ -5,16 +5,20 @@ from unicodedata import normalize
 from typing import Optional
 
 
+AVAILABLE_LANGS = [
+    "en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es", "et", "fi",
+    "fr", "hi", "hr", "hu", "id", "it", "lt", "lv", "nl", "pl", "pt", "ro",
+    "ru", "sk", "sl", "sv", "tr", "uk", "vi", "na",
+]
+
+
 class UnicodeProcessor:
     def __init__(self, unicode_indexer_path: str):
         with open(unicode_indexer_path, "r") as f:
             self.indexer = json.load(f)
 
-    def _preprocess_text(self, text: str) -> str:
-        # TODO: Need advanced normalizer for better performance
+    def _preprocess_text(self, text: str, lang: str) -> str:
         text = normalize("NFKD", text)
-
-        # FIXME: this should be fixed for non-English languages
 
         # Remove emojis (wide Unicode range)
         emoji_pattern = re.compile(
@@ -27,8 +31,8 @@ class UnicodeProcessor:
             "\U0001f900-\U0001f9ff"
             "\U0001fa00-\U0001fa6f"
             "\U0001fa70-\U0001faff"
-            "\u2600-\u26ff"
-            "\u2700-\u27bf"
+            "☀-⛿"
+            "✀-➿"
             "\U0001f1e6-\U0001f1ff]+",
             flags=re.UNICODE,
         )
@@ -39,7 +43,6 @@ class UnicodeProcessor:
             "–": "-",
             "‑": "-",
             "—": "-",
-            "¯": " ",
             "_": " ",
             "“": '"',
             "”": '"',
@@ -57,13 +60,6 @@ class UnicodeProcessor:
         }
         for k, v in replacements.items():
             text = text.replace(k, v)
-
-        # Remove combining diacritics # FIXME: this should be fixed for non-English languages
-        text = re.sub(
-            r"[\u0302\u0303\u0304\u0305\u0306\u0307\u0308\u030A\u030B\u030C\u0327\u0328\u0329\u032A\u032B\u032C\u032D\u032E\u032F]",
-            "",
-            text,
-        )
 
         # Remove special symbols
         text = re.sub(r"[♥☆♡©\\]", "", text)
@@ -98,9 +94,12 @@ class UnicodeProcessor:
         text = re.sub(r"\s+", " ", text).strip()
 
         # If text doesn't end with punctuation, quotes, or closing brackets, add a period
-        if not re.search(r"[.!?;:,'\"')\]}…。」』】〉》›»]$", text):
+        if not re.search(r"[.!?;:,'\"’)\]}…。」』】〉》›»]$", text):
             text += "."
 
+        if lang not in AVAILABLE_LANGS:
+            raise ValueError(f"Invalid language: {lang}")
+        text = f"<{lang}>" + text + f"</{lang}>"
         return text
 
     def _get_text_mask(self, text_ids_lengths: np.ndarray) -> np.ndarray:
@@ -113,8 +112,12 @@ class UnicodeProcessor:
         )  # 2 bytes
         return unicode_values
 
-    def __call__(self, text_list: list[str]) -> tuple[np.ndarray, np.ndarray]:
-        text_list = [self._preprocess_text(t) for t in text_list]
+    def __call__(
+        self, text_list: list[str], lang_list: list[str]
+    ) -> tuple[np.ndarray, np.ndarray]:
+        text_list = [
+            self._preprocess_text(t, lang) for t, lang in zip(text_list, lang_list)
+        ]
         text_ids_lengths = np.array([len(text) for text in text_list], dtype=np.int64)
         text_ids = np.zeros((len(text_list), text_ids_lengths.max()), dtype=np.int64)
         for i, text in enumerate(text_list):
