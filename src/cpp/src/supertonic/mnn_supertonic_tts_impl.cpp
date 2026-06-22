@@ -22,106 +22,91 @@
 using json = nlohmann::json;
 using namespace MNN::Express;
 
-namespace
-{ // Helper namespace
+namespace { // Helper namespace
 
-  // Emoji ranges check (matching Python regex)
-  bool is_emoji(char32_t cp)
-  {
-    if (cp >= 0x1F600 && cp <= 0x1F64F)
-      return true; // emoticons
-    if (cp >= 0x1F300 && cp <= 0x1F5FF)
-      return true; // symbols & pictographs
-    if (cp >= 0x1F680 && cp <= 0x1F6FF)
-      return true; // transport & map
-    if (cp >= 0x1F700 && cp <= 0x1F77F)
-      return true;
-    if (cp >= 0x1F780 && cp <= 0x1F7FF)
-      return true;
-    if (cp >= 0x1F800 && cp <= 0x1F8FF)
-      return true;
-    if (cp >= 0x1F900 && cp <= 0x1F9FF)
-      return true;
-    if (cp >= 0x1FA00 && cp <= 0x1FA6F)
-      return true;
-    if (cp >= 0x1FA70 && cp <= 0x1FAFF)
-      return true;
-    if (cp >= 0x2600 && cp <= 0x26FF)
-      return true;
-    if (cp >= 0x2700 && cp <= 0x27BF)
-      return true;
-    if (cp >= 0x1F1E6 && cp <= 0x1F1FF)
-      return true; // flags?
-    return false;
-  }
+// Emoji ranges check (matching Python regex)
+bool is_emoji(char32_t cp) {
+  if (cp >= 0x1F600 && cp <= 0x1F64F)
+    return true; // emoticons
+  if (cp >= 0x1F300 && cp <= 0x1F5FF)
+    return true; // symbols & pictographs
+  if (cp >= 0x1F680 && cp <= 0x1F6FF)
+    return true; // transport & map
+  if (cp >= 0x1F700 && cp <= 0x1F77F)
+    return true;
+  if (cp >= 0x1F780 && cp <= 0x1F7FF)
+    return true;
+  if (cp >= 0x1F800 && cp <= 0x1F8FF)
+    return true;
+  if (cp >= 0x1F900 && cp <= 0x1F9FF)
+    return true;
+  if (cp >= 0x1FA00 && cp <= 0x1FA6F)
+    return true;
+  if (cp >= 0x1FA70 && cp <= 0x1FAFF)
+    return true;
+  if (cp >= 0x2600 && cp <= 0x26FF)
+    return true;
+  if (cp >= 0x2700 && cp <= 0x27BF)
+    return true;
+  if (cp >= 0x1F1E6 && cp <= 0x1F1FF)
+    return true; // flags?
+  return false;
+}
 
-  // Combining diacritics check
-  bool is_combining_diacritic(char32_t cp)
-  {
-    // [\u0302\u0303\u0304\u0305\u0306\u0307\u0308\u030A\u030B\u030C\u0327\u0328\u0329\u032A\u032B\u032C\u032D\u032E\u032F]
-    // Simplified range check for performance (approximate 0300-036F block often
-    // used) But Python text.py is specific. Let's list them or use range if
-    // contiguous. They are mostly in 0x0300 block.
-    static const std::unordered_set<char32_t> diacritics = {
-        0x0302, 0x0303, 0x0304, 0x0305, 0x0306, 0x0307, 0x0308,
-        0x030A, 0x030B, 0x030C, 0x0327, 0x0328, 0x0329, 0x032A,
-        0x032B, 0x032C, 0x032D, 0x032E, 0x032F};
-    return diacritics.count(cp);
-  }
+// Combining diacritics check
+bool is_combining_diacritic(char32_t cp) {
+  // [\u0302\u0303\u0304\u0305\u0306\u0307\u0308\u030A\u030B\u030C\u0327\u0328\u0329\u032A\u032B\u032C\u032D\u032E\u032F]
+  // Simplified range check for performance (approximate 0300-036F block often
+  // used) But Python text.py is specific. Let's list them or use range if
+  // contiguous. They are mostly in 0x0300 block.
+  static const std::unordered_set<char32_t> diacritics = {
+      0x0302, 0x0303, 0x0304, 0x0305, 0x0306, 0x0307, 0x0308,
+      0x030A, 0x030B, 0x030C, 0x0327, 0x0328, 0x0329, 0x032A,
+      0x032B, 0x032C, 0x032D, 0x032E, 0x032F};
+  return diacritics.count(cp);
+}
 
-  // Special symbols check
-  bool is_special_symbol(char32_t cp)
-  {
-    // [♥☆♡©\\]
-    return cp == 0x2665 || cp == 0x2606 || cp == 0x2661 || cp == 0x00A9 ||
-           cp == 0x005C;
-  }
+// Special symbols check
+bool is_special_symbol(char32_t cp) {
+  // [♥☆♡©\\]
+  return cp == 0x2665 || cp == 0x2606 || cp == 0x2661 || cp == 0x00A9 ||
+         cp == 0x005C;
+}
 
-  bool is_end_punctuation(char32_t cp)
-  {
-    // [.!?;:,'\"')\]}…。」』】〉》›»]
-    static const std::unordered_set<char32_t> puncts = {
-        '.', '!', '?', ';', ':', ',', '\'',
-        '"', ')', ']', '}', 0x2026, 0x3002, 0x300D,
-        0x300F, 0x3011, 0x3009, 0x300B, 0x203A, 0x00BB};
-    return puncts.count(cp);
-  }
+bool is_end_punctuation(char32_t cp) {
+  // [.!?;:,'\"')\]}…。」』】〉》›»]
+  static const std::unordered_set<char32_t> puncts = {
+      '.',    '!',    '?',    ';',    ':',    ',',    '\'',
+      '"',    ')',    ']',    '}',    0x2026, 0x3002, 0x300D,
+      0x300F, 0x3011, 0x3009, 0x300B, 0x203A, 0x00BB};
+  return puncts.count(cp);
+}
 
-  void utf8_append(std::string &s, char32_t cp)
-  {
-    if (cp < 0x80)
-    {
-      s.push_back(static_cast<char>(cp));
-    }
-    else if (cp < 0x800)
-    {
-      s.push_back(static_cast<char>(0xC0 | (cp >> 6)));
-      s.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    }
-    else if (cp < 0x10000)
-    {
-      s.push_back(static_cast<char>(0xE0 | (cp >> 12)));
-      s.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-      s.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    }
-    else if (cp <= 0x10FFFF)
-    {
-      s.push_back(static_cast<char>(0xF0 | (cp >> 18)));
-      s.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
-      s.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-      s.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-    }
+void utf8_append(std::string &s, char32_t cp) {
+  if (cp < 0x80) {
+    s.push_back(static_cast<char>(cp));
+  } else if (cp < 0x800) {
+    s.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+    s.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+  } else if (cp < 0x10000) {
+    s.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+    s.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+    s.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+  } else if (cp <= 0x10FFFF) {
+    s.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+    s.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+    s.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+    s.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
   }
+}
 
 } // namespace
 
 // Text processor implementation
 MNNSupertonicTTSImpl::TextProcessor::TextProcessor(
-    const std::string &indexer_path)
-{
+    const std::string &indexer_path) {
   std::ifstream file(indexer_path);
-  if (!file.is_open())
-  {
+  if (!file.is_open()) {
     throw std::runtime_error("Failed to open unicode indexer file: " +
                              indexer_path);
   }
@@ -131,8 +116,7 @@ MNNSupertonicTTSImpl::TextProcessor::TextProcessor(
   file.close();
 
   // Parse indexer
-  for (auto &item : indexer_json.items())
-  {
+  for (auto &item : indexer_json.items()) {
     uint16_t unicode_val = static_cast<uint16_t>(std::stoi(item.key()));
     int index = item.value().get<int>();
     unicode_to_index_[unicode_val] = index;
@@ -144,8 +128,7 @@ MNNSupertonicTTSImpl::TextProcessor::TextProcessor(
 }
 
 std::vector<int>
-MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
-{
+MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text) {
   std::vector<int> encoded;
 
   // 1. Normalize NFKD
@@ -156,8 +139,7 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
   filtered.reserve(text_norm.size());
 
   auto view = una::ranges::utf8_view(text_norm);
-  for (auto it = view.begin(); it != view.end(); ++it)
-  {
+  for (auto it = view.begin(); it != view.end(); ++it) {
     char32_t cp = *it;
 
     if (is_emoji(cp))
@@ -168,8 +150,7 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
       continue;
 
     // Char replacements
-    switch (cp)
-    {
+    switch (cp) {
     case 0x2013: // –
     case 0x2011: // ‑
     case 0x2014: // —
@@ -213,11 +194,9 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
   // "@" -> " at "
   // Simple find/replace loop for these few replacements.
   auto replace_all = [](std::string &str, const std::string &from,
-                        const std::string &to)
-  {
+                        const std::string &to) {
     size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos)
-    {
+    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
       str.replace(start_pos, from.length(), to);
       start_pos += to.length();
     }
@@ -255,8 +234,7 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
 
   // 5. Add period if needed
   bool has_end_punct = false;
-  if (!t.empty())
-  {
+  if (!t.empty()) {
     auto last_view = una::ranges::utf8_view(t);
     // get last char
     char32_t last_cp = 0;
@@ -266,24 +244,19 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
       has_end_punct = true;
   }
 
-  if (!t.empty() && !has_end_punct)
-  {
+  if (!t.empty() && !has_end_punct) {
     t += ".";
   }
 
   // 6. Encode to IDs
   auto final_view = una::ranges::utf8_view(t);
-  for (char32_t cp : final_view)
-  {
+  for (char32_t cp : final_view) {
     uint16_t val =
         static_cast<uint16_t>(cp); // Potential truncation if outside BMP
     auto it = unicode_to_index_.find(val);
-    if (it != unicode_to_index_.end())
-    {
+    if (it != unicode_to_index_.end()) {
       encoded.push_back(it->second);
-    }
-    else
-    {
+    } else {
       // Handle unknown characters by mapping to index 0 (padding/unknown)
       encoded.push_back(0);
     }
@@ -295,8 +268,7 @@ MNNSupertonicTTSImpl::TextProcessor::encode(const std::string &text)
 // MNNSupertonicTTSImpl implementation
 MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
                                            const std::string &precision_dir)
-    : models_dir_(models_dir), precision_dir_(precision_dir)
-{
+    : models_dir_(models_dir), precision_dir_(precision_dir) {
 
   std::cout << "model_dir_" << models_dir_ << std::endl;
   std::cout << "precsion_dir: " << precision_dir_ << std::endl;
@@ -306,8 +278,7 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
   // Load config
   std::string config_path = models_dir_ + "/mnn_models/tts.json";
   std::ifstream config_file(config_path);
-  if (!config_file.is_open())
-  {
+  if (!config_file.is_open()) {
     PLOG(ERROR, "Failed to open config file: " + config_path);
     throw std::runtime_error("Failed to open config file: " + config_path);
   }
@@ -315,35 +286,27 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
   config_file >> config;
 
   // Parse configuration
-  try
-  {
-    if (config.contains("ae"))
-    {
+  try {
+    if (config.contains("ae")) {
       sample_rate_ = config["ae"].value("sample_rate",
                                         24000); // Default to 24000 if missing
       base_chunk_size_ = config["ae"].value("base_chunk_size", 512);
-    }
-    else
-    {
+    } else {
       sample_rate_ = 24000;
       base_chunk_size_ = 512;
     }
 
     // Attempt to retrieve TTL configuration
-    if (config.contains("ttl"))
-    {
+    if (config.contains("ttl")) {
       chunk_compress_factor_ = config["ttl"].value("chunk_compress_factor", 6);
       ldim_ = config["ttl"].value("latent_dim", 24);
-    }
-    else
-    {
+    } else {
       // Fallback: Use default values or check specific nested keys
       chunk_compress_factor_ = 6;
       ldim_ = 24;
 
       if (config.contains("style_encoder") &&
-          config["style_encoder"].contains("proj_in"))
-      {
+          config["style_encoder"].contains("proj_in")) {
         chunk_compress_factor_ = config["style_encoder"]["proj_in"].value(
             "chunk_compress_factor", 6);
         ldim_ = config["style_encoder"]["proj_in"].value("ldim", 24);
@@ -355,9 +318,7 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
                    ", chunk_compress_factor=" +
                    std::to_string(chunk_compress_factor_) +
                    ", ldim=" + std::to_string(ldim_));
-  }
-  catch (const std::exception &e)
-  {
+  } catch (const std::exception &e) {
     PLOG(ERROR, "Error parsing config: " + std::string(e.what()));
     throw;
   }
@@ -375,35 +336,29 @@ MNNSupertonicTTSImpl::MNNSupertonicTTSImpl(const std::string &models_dir,
   PLOG(INFO, "Supertonic TTS initialized successfully");
 }
 
-void MNNSupertonicTTSImpl::loadVoiceStyles()
-{
+void MNNSupertonicTTSImpl::loadVoiceStyles() {
   PLOG(INFO, "Loading voice styles...");
 
   // Default voices
-  for (const auto &id : voice_ids_)
-  {
+  for (const auto &id : voice_ids_) {
     loadVoiceStyle(id);
   }
   PLOG(INFO, "Voice styles loaded successfully");
 }
 
-void MNNSupertonicTTSImpl::loadVoiceStyle(const std::string &voice_name)
-{
-  try
-  {
+void MNNSupertonicTTSImpl::loadVoiceStyle(const std::string &voice_name) {
+  try {
     std::string style_path =
         models_dir_ + "/mnn_models/voice_styles/" + voice_name + ".json";
     // Check if file exists, if not try old path structure
     std::ifstream f_check(style_path);
-    if (!f_check.good())
-    {
+    if (!f_check.good()) {
       style_path = models_dir_ + "/voice_styles/" + voice_name + ".json";
     }
     f_check.close();
 
     std::ifstream style_file(style_path);
-    if (!style_file.is_open())
-    {
+    if (!style_file.is_open()) {
       PLOG(WARNING, "Failed to open style.json for voice: " + voice_name +
                         " at " + style_path);
       return;
@@ -415,13 +370,10 @@ void MNNSupertonicTTSImpl::loadVoiceStyle(const std::string &voice_name)
 
     std::vector<std::vector<float>> ttl_vectors, dp_vectors;
 
-    if (style_json.contains("style_ttl") && style_json.contains("style_dp"))
-    {
+    if (style_json.contains("style_ttl") && style_json.contains("style_dp")) {
       // Parse TTL
-      for (const auto &ttl_item : style_json["style_ttl"]["data"])
-      {
-        for (const auto &vec : ttl_item)
-        {
+      for (const auto &ttl_item : style_json["style_ttl"]["data"]) {
+        for (const auto &vec : ttl_item) {
           std::vector<float> ttl_vector;
           for (const auto &val : vec)
             ttl_vector.push_back(val.get<float>());
@@ -429,10 +381,8 @@ void MNNSupertonicTTSImpl::loadVoiceStyle(const std::string &voice_name)
         }
       }
       // Parse DP
-      for (const auto &dp_item : style_json["style_dp"]["data"])
-      {
-        for (const auto &vec : dp_item)
-        {
+      for (const auto &dp_item : style_json["style_dp"]["data"]) {
+        for (const auto &vec : dp_item) {
           std::vector<float> dp_vector;
           for (const auto &val : vec)
             dp_vector.push_back(val.get<float>());
@@ -442,15 +392,12 @@ void MNNSupertonicTTSImpl::loadVoiceStyle(const std::string &voice_name)
       voice_styles_[voice_name] = VoiceStyle(ttl_vectors, dp_vectors);
       PLOG(INFO, "Loaded voice style: " + voice_name);
     }
-  }
-  catch (const std::exception &e)
-  {
+  } catch (const std::exception &e) {
     PLOG(ERROR, "Error loading voice style " + voice_name + ": " + e.what());
   }
 }
 
-std::string MNNSupertonicTTSImpl::preprocessText(const std::string &text)
-{
+std::string MNNSupertonicTTSImpl::preprocessText(const std::string &text) {
   // Remove excess whitespace
   std::string processed = std::regex_replace(text, std::regex("\\s+"), " ");
   // Trim leading/trailing whitespace
@@ -459,13 +406,11 @@ std::string MNNSupertonicTTSImpl::preprocessText(const std::string &text)
   return processed;
 }
 
-std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text)
-{
+std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text) {
   const std::string &voice_name = "F1";
   int steps = 5;
   float speed = 1.0;
-  if (voice_styles_.find(voice_name) == voice_styles_.end())
-  {
+  if (voice_styles_.find(voice_name) == voice_styles_.end()) {
     PLOG(ERROR, "Voice style not found: " + voice_name);
     throw std::runtime_error("Voice style not found: " + voice_name);
   }
@@ -475,15 +420,14 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text)
 
 bool MNNSupertonicTTSImpl::save(const std::string &filename,
                                 const std::vector<float> &audio_data,
-                                int sample_rate)
-{
+                                int sample_rate) {
   return writeWavFile(filename, audio_data, sample_rate);
 }
 
-std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
-                                                        const VoiceStyle &voice_style, int steps,
-                                                        float speed)
-{
+std::tuple<int, Audio>
+MNNSupertonicTTSImpl::synthesize(const std::string &text,
+                                 const VoiceStyle &voice_style, int steps,
+                                 float speed) {
 
   auto default_ret = std::make_tuple(sample_rate_, std::vector<int16_t>(0));
   auto start_time = std::chrono::high_resolution_clock::now();
@@ -493,8 +437,7 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
   // 1. Text Encoding
   std::vector<int> text_ids = text_processor_->encode(text);
   // Ensure non-empty text_ids; pad with 0 if necessary
-  if (text_ids.empty())
-  {
+  if (text_ids.empty()) {
     text_ids.push_back(0);
   }
 
@@ -503,8 +446,7 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
 
   // 2. Duration Prediction
   auto duration_outputs = predictDuration(text_ids, voice_style.dp, text_mask);
-  if (duration_outputs.empty())
-  {
+  if (duration_outputs.empty()) {
     PLOG(ERROR, "Duration prediction failed");
     return default_ret;
   }
@@ -514,13 +456,13 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
   float total_duration_sec = duration_outputs[0];
 
   // Apply speed adjustment
-  if (speed > 0.0f)
-  {
+  if (speed > 0.0f) {
     total_duration_sec /= speed;
   }
 
   int wav_len = static_cast<int>(total_duration_sec * sample_rate_);
-  int latent_len = wav_len / base_chunk_size_;
+  int chunk_size = base_chunk_size_ * chunk_compress_factor_;
+  int latent_len = (wav_len + chunk_size - 1) / chunk_size;
 
   // Ensure minimum length
   if (latent_len < 1)
@@ -532,8 +474,7 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
   // This uses the text encoder model
   std::vector<float> text_emb =
       encodeText(text_ids, voice_style.ttl, text_mask);
-  if (text_emb.empty())
-  {
+  if (text_emb.empty()) {
     PLOG(ERROR, "Text encoding failed");
     return default_ret;
   }
@@ -541,13 +482,11 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
   // 5. Vector Estimation (Flow Matching)
   // Flatten style.ttl for Vector Estimator input
   std::vector<float> style_ttl_flat;
-  if (!voice_style.ttl.empty())
-  {
+  if (!voice_style.ttl.empty()) {
     int ttl_dim0 = voice_style.ttl.size();
     int ttl_dim1 = voice_style.ttl[0].size();
     style_ttl_flat.reserve(ttl_dim0 * ttl_dim1);
-    for (const auto &vec : voice_style.ttl)
-    {
+    for (const auto &vec : voice_style.ttl) {
       style_ttl_flat.insert(style_ttl_flat.end(), vec.begin(), vec.end());
     }
   }
@@ -563,19 +502,16 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
   std::mt19937 gen(rd());
   std::normal_distribution<float> dis(0.0f, 1.0f);
 
-  for (size_t i = 0; i < noisy_latent.size(); ++i)
-  {
+  for (size_t i = 0; i < noisy_latent.size(); ++i) {
     noisy_latent[i] = dis(gen);
   }
 
   // Perform Flow Matching steps
   std::vector<float> estimated = noisy_latent;
-  for (int step = 0; step < steps; ++step)
-  {
+  for (int step = 0; step < steps; ++step) {
     estimated = estimateVector(estimated, text_emb, style_ttl_flat, latent_mask,
                                text_mask, step, steps);
-    if (estimated.empty())
-    {
+    if (estimated.empty()) {
       PLOG(ERROR, "Vector estimation failed at step " + std::to_string(step));
       return default_ret;
     }
@@ -583,8 +519,7 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
 
   // 6. Vocoder Synthesis
   std::vector<float> audio = vocode(estimated);
-  if (audio.empty())
-  {
+  if (audio.empty()) {
     PLOG(ERROR, "Vocoding failed");
     return default_ret;
   }
@@ -597,8 +532,7 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
   PLOG(INFO, "RTF: " + std::to_string(rtf));
 
   std::vector<int16_t> audio_int16;
-  for (int i = 0; i < audio.size(); i++)
-  {
+  for (int i = 0; i < audio.size(); i++) {
     audio_int16.push_back(audio[i] * 32768);
   }
 
@@ -609,8 +543,7 @@ std::tuple<int, Audio> MNNSupertonicTTSImpl::synthesize(const std::string &text,
 std::vector<float> MNNSupertonicTTSImpl::predictDuration(
     const std::vector<int> &text_ids,
     const std::vector<std::vector<float>> &style_dp,
-    const std::vector<float> &text_mask)
-{
+    const std::vector<float> &text_mask) {
 
   MNN::Express::ExecutorScope scope(executor_);
 
@@ -624,8 +557,7 @@ std::vector<float> MNNSupertonicTTSImpl::predictDuration(
   inputs[0] =
       MNN::Express::_Input({1, num_tokens}, NCHW, halide_type_of<int>());
   auto ptr0 = inputs[0]->writeMap<int>();
-  for (int i = 0; i < num_tokens; ++i)
-  {
+  for (int i = 0; i < num_tokens; ++i) {
     ptr0[i] = text_ids[i];
   }
 
@@ -633,10 +565,8 @@ std::vector<float> MNNSupertonicTTSImpl::predictDuration(
   inputs[1] = MNN::Express::_Input({1, dp_size_0, dp_size_1}, NCHW,
                                    halide_type_of<float>());
   auto ptr1 = inputs[1]->writeMap<float>();
-  for (int i = 0; i < dp_size_0; ++i)
-  {
-    for (int j = 0; j < dp_size_1; ++j)
-    {
+  for (int i = 0; i < dp_size_0; ++i) {
+    for (int j = 0; j < dp_size_1; ++j) {
       ptr1[i * dp_size_1 + j] = style_dp[i][j];
     }
   }
@@ -645,8 +575,7 @@ std::vector<float> MNNSupertonicTTSImpl::predictDuration(
   inputs[2] =
       MNN::Express::_Input({1, 1, num_tokens}, NCHW, halide_type_of<float>());
   auto ptr2 = inputs[2]->writeMap<float>();
-  for (int i = 0; i < num_tokens; ++i)
-  {
+  for (int i = 0; i < num_tokens; ++i) {
     ptr2[i] = text_mask[i];
   }
 
@@ -654,8 +583,7 @@ std::vector<float> MNNSupertonicTTSImpl::predictDuration(
   std::vector<MNN::Express::VARP> outputs = dp_module_->onForward(inputs);
 
   // Process Output
-  if (outputs.empty())
-  {
+  if (outputs.empty()) {
     PLOG(ERROR, "Duration Predictor returned empty output");
     return {};
   }
@@ -671,8 +599,7 @@ std::vector<float> MNNSupertonicTTSImpl::predictDuration(
 std::vector<float> MNNSupertonicTTSImpl::encodeText(
     const std::vector<int> &text_ids,
     const std::vector<std::vector<float>> &style_ttl,
-    const std::vector<float> &text_mask)
-{
+    const std::vector<float> &text_mask) {
 
   MNN::Express::ExecutorScope scope(executor_);
 
@@ -683,8 +610,7 @@ std::vector<float> MNNSupertonicTTSImpl::encodeText(
   inputs[0] =
       MNN::Express::_Input({1, num_tokens}, NCHW, halide_type_of<int>());
   auto ptr0 = inputs[0]->writeMap<int>();
-  for (int i = 0; i < num_tokens; ++i)
-  {
+  for (int i = 0; i < num_tokens; ++i) {
     ptr0[i] = text_ids[i];
   }
 
@@ -694,10 +620,8 @@ std::vector<float> MNNSupertonicTTSImpl::encodeText(
   inputs[1] = MNN::Express::_Input({1, ttl_size_0, ttl_size_1}, NCHW,
                                    halide_type_of<float>());
   auto ptr1 = inputs[1]->writeMap<float>();
-  for (int i = 0; i < ttl_size_0; ++i)
-  {
-    for (int j = 0; j < ttl_size_1; ++j)
-    {
+  for (int i = 0; i < ttl_size_0; ++i) {
+    for (int j = 0; j < ttl_size_1; ++j) {
       ptr1[i * ttl_size_1 + j] = style_ttl[i][j];
     }
   }
@@ -706,16 +630,14 @@ std::vector<float> MNNSupertonicTTSImpl::encodeText(
   inputs[2] =
       MNN::Express::_Input({1, 1, num_tokens}, NCHW, halide_type_of<float>());
   auto ptr2 = inputs[2]->writeMap<float>();
-  for (int i = 0; i < num_tokens; ++i)
-  {
+  for (int i = 0; i < num_tokens; ++i) {
     ptr2[i] = text_mask[i];
   }
 
   // Run Inference
   std::vector<MNN::Express::VARP> outputs = te_module_->onForward(inputs);
 
-  if (outputs.empty())
-  {
+  if (outputs.empty()) {
     PLOG(ERROR, "Text Encoder returned empty output");
     return {};
   }
@@ -731,8 +653,7 @@ std::vector<float> MNNSupertonicTTSImpl::encodeText(
 std::vector<float> MNNSupertonicTTSImpl::estimateVector(
     const std::vector<float> &noisy_latent, const std::vector<float> &text_emb,
     const std::vector<float> &style_ttl, const std::vector<int> &latent_mask,
-    const std::vector<float> &text_mask, int current_step, int total_step)
-{
+    const std::vector<float> &text_mask, int current_step, int total_step) {
 
   MNN::Express::ExecutorScope scope(executor_);
 
@@ -759,8 +680,13 @@ std::vector<float> MNNSupertonicTTSImpl::estimateVector(
   ::memcpy(inputs[1]->writeMap<float>(), text_emb.data(),
            text_emb.size() * sizeof(float));
 
-  // Input 2: style_ttl {1, 50, 256} NCHW
-  inputs[2] = MNN::Express::_Input({1, 50, 256}, NCHW, halide_type_of<float>());
+  // Input 2: style_ttl {1, num_style_vectors, 256} NCHW
+  int style_len = static_cast<int>(style_ttl.size());
+  int style_dim = 256;
+  int num_style_vectors = style_len / style_dim;
+
+  inputs[2] = MNN::Express::_Input({1, num_style_vectors, style_dim}, NCHW,
+                                   halide_type_of<float>());
   ::memcpy(inputs[2]->writeMap<float>(), style_ttl.data(),
            style_ttl.size() * sizeof(float));
 
@@ -787,8 +713,7 @@ std::vector<float> MNNSupertonicTTSImpl::estimateVector(
 
   auto outputs = ve_module_->onForward(inputs);
 
-  if (outputs.empty())
-  {
+  if (outputs.empty()) {
     PLOG(ERROR, "Vector Estimator returned empty output");
     return {};
   }
@@ -801,8 +726,7 @@ std::vector<float> MNNSupertonicTTSImpl::estimateVector(
 }
 
 std::vector<float>
-MNNSupertonicTTSImpl::vocode(const std::vector<float> &latent)
-{
+MNNSupertonicTTSImpl::vocode(const std::vector<float> &latent) {
   MNN::Express::ExecutorScope scope(executor_);
 
   // Shape: {1, 144, latent_len}
@@ -828,7 +752,8 @@ MNNSupertonicTTSImpl::vocode(const std::vector<float> &latent)
   return result;
 }
 
-// std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text) {
+// std::tuple<int, Audio> MNNSupertonicTTSImpl::Process(const std::string &text)
+// {
 //   // Simplified Process implementation for compatibility with base class
 //   // interface
 //   VoiceStyle default_voice({{{0.1f, 0.2f, 0.3f}}}, {{{0.4f, 0.5f, 0.6f}}});
@@ -845,8 +770,7 @@ MNNSupertonicTTSImpl::vocode(const std::vector<float> &latent)
 // }
 
 // Initialize MNN Models
-void MNNSupertonicTTSImpl::initializeModels()
-{
+void MNNSupertonicTTSImpl::initializeModels() {
   PLOG(INFO, "Initializing models...");
 
   // Set up Runtime (Executor) with Low Precision config
@@ -861,16 +785,14 @@ void MNNSupertonicTTSImpl::initializeModels()
   MNN::Express::ExecutorScope scope(executor_);
 
   // Load Models directly using Module::load
-  auto loadModule = [&](const std::string &filename, const std::string &name)
-  {
+  auto loadModule = [&](const std::string &filename, const std::string &name) {
     std::string path =
         models_dir_ + "/mnn_models/" + precision_dir_ + "/" + filename;
     std::vector<std::string> inputs,
         outputs; // Empty for auto-detection or not needed for load
     auto module = std::shared_ptr<MNN::Express::Module>(
         MNN::Express::Module::load(inputs, outputs, path.c_str()));
-    if (!module)
-    {
+    if (!module) {
       PLOG(ERROR, "Failed to load " + name + ": " + path);
       throw std::runtime_error("Failed to load model: " + path);
     }

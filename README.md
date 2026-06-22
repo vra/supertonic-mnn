@@ -52,6 +52,19 @@ tts = SupertonicTTS()
 audio, sample_rate = tts.synthesize("Hello world", voice="M1", output_file="hello.wav")
 ```
 
+#### C++ API
+```cpp
+#include "supertonic/supertonic.hpp"
+
+// 1. Initialize
+TTSConfig config;
+config.model_dir = "~/.cache/supertonic-mnn";
+SupertonicTTS tts(config);
+
+// 2. Synthesize
+auto [audio, sample_rate, rtf] = tts.synthesize("Hello world", "M1", 5, 1.0f, "hello.wav");
+```
+
 See [examples/](examples/) for more details.
 
 ### Acknowledgments
@@ -101,6 +114,19 @@ tts = SupertonicTTS()
 # 2. 推理
 # 如果模型不存在，会自动下载
 audio, sample_rate = tts.synthesize("你好，世界", voice="M1", output_file="hello.wav")
+```
+
+#### C++ API
+```cpp
+#include "supertonic/supertonic.hpp"
+
+// 1. 初始化
+TTSConfig config;
+config.model_dir = "~/.cache/supertonic-mnn";
+SupertonicTTS tts(config);
+
+// 2. 推理
+auto [audio, sample_rate, rtf] = tts.synthesize("你好，世界", "M1", 5, 1.0f, "hello.wav");
 ```
 
 更多详情请参阅 [examples/](examples/) 目录。

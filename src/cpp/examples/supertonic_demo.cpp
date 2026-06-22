@@ -12,10 +12,8 @@
 typedef std::chrono::milliseconds ms;
 using clk = std::chrono::system_clock;
 
-int main()
-{
-  try
-  {
+int main() {
+  try {
     // Set Log Level
     MNNITTSLogger::GetInstance().SetLogLevel(INFO);
 
@@ -37,19 +35,17 @@ int main()
 
     // Text to Speech
     auto [sample_rate, audio_data] = tts.Process(text);
-    std::cout <<"==> sample rate: " << sample_rate << std::endl;
+    std::cout << "==> sample rate: " << sample_rate << std::endl;
 
     std::string output_file = "output.wav";
     // tts.save(audio_data, output_file);
     std::vector<float> audio_fp32;
-    for (auto& e: audio_data) {
-      audio_fp32.push_back(float(e)/32768.0f);
+    for (auto &e : audio_data) {
+      audio_fp32.push_back(float(e) / 32768.0f);
     }
-    writeWavFile(output_file, audio_fp32, 44100);
+    tts.WriteAudioToFile(audio_data, output_file);
     return 0;
-  }
-  catch (const std::exception &e)
-  {
+  } catch (const std::exception &e) {
     PLOG(ERROR, "Error: " + std::string(e.what()));
     return 1;
   }
